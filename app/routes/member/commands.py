@@ -24,12 +24,12 @@ def member_team_get_command():
         if team:
             return jsonify({
                 'success': True,
-                'response': f'{team}'
+                'response': f'{user}님은 {team}팀입니다.'
             }), 200
         else:
             return jsonify({
                 'success': False,
-                'response': 'no team'
+                'response': f'{user}님은 팀이 없습니다.'
             }), 200
     except Exception as e:
         return jsonify({

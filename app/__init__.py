@@ -31,7 +31,7 @@ def create_app(config_class=Config):
     app.register_blueprint(commands.bp)
     app.register_blueprint(member_commands.bp)
 
-    @app.route('/health')
+    @app.route('/health', methods=['POST'])
     def health_check():
         redis_status = 'ok'
         try:

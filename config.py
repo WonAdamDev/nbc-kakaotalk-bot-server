@@ -9,3 +9,4 @@ class Config:
     DEBUG = os.environ.get('DEBUG', 'True') == 'True'
     HOST = os.environ.get('HOST', '0.0.0.0')
     PORT = int(os.environ.get('PORT', 5000))
+    REDIS_URL = os.environ.get('REDIS_URL') or 'redis://localhost:6379'

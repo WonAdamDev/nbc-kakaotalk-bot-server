@@ -3,7 +3,7 @@ from app import redis_client
 
 bp = Blueprint('commands', __name__, url_prefix='/api/commands')
 
-@bp.route('/echo', methods=['POST'])
+@bp.route('/echo/', methods=['POST'])
 def echo_command():
     """
     에코 명령어 처리

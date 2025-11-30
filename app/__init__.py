@@ -51,7 +51,7 @@ def create_app(config_class=Config):
 
     from flask import request
     
-    @app.route('/health', methods=['POST'])
+    @app.route('/health/', methods=['POST'])
     def health_check():
         data = request.get_json()
         print(f"[HEALTH] Received JSON: {data}")

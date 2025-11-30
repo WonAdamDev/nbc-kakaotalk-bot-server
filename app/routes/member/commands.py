@@ -107,7 +107,7 @@ def member_delete_command():
             'response': f'오류가 발생했습니다: {str(e)}'
         }), 500
 
-@bp.route('/team', methods=['GET'])
+@bp.route('/team/', methods=['GET'])
 def member_team_get_command():
     if not redis_client:
         return jsonify({
@@ -151,7 +151,7 @@ def member_team_get_command():
         }), 500
     
 
-@bp.route('/team', methods=['POST'])
+@bp.route('/team/', methods=['POST'])
 def member_team_post_command():
     if not redis_client:
         return jsonify({

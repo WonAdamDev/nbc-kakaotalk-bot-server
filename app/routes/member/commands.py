@@ -12,24 +12,24 @@ def member_team_get_command():
         }), 500
 
     # GET 요청: 쿼리 스트링에서 파라미터 읽기
-    user = request.args.get('target', 'unknown')
+    member = request.args.get('member', 'unknown')
     room = request.args.get('room', 'unknown')
 
-    print(f"[TEAM GET] Query params: target={user}, room={room}")
+    print(f"[TEAM GET] Query params: member={member}, room={room}")
 
     try:
-        key = f"room:{room}:user:{user}:team"
+        key = f"room:{room}:member:{member}:team"
         team = redis_client.get(key)
 
         if team:
             return jsonify({
                 'success': True,
-                'response': f'{user}님은 {team}팀입니다.'
+                'response': f'{member}님은 {team}팀입니다.'
             }), 200
         else:
             return jsonify({
                 'success': False,
-                'response': f'{user}님은 팀이 없습니다.'
+                'response': f'{member}님은 팀이 없습니다.'
             }), 200
     except Exception as e:
         return jsonify({
@@ -49,12 +49,12 @@ def member_team_post_command():
     data = request.get_json()
     print(f"[TEAM POST] Received JSON: {data}")
 
-    user = data.get('target', 'unknown')
+    member = data.get('member', 'unknown')
     room = data.get('room', 'unknown')
     team = data.get('team')  # 기본값 없이 가져오기
 
     try:
-        key = f"room:{room}:user:{user}:team"
+        key = f"room:{room}:member:{member}:team"
 
         # team 파라미터가 없으면 팀 배정 삭제
         if team is None:
@@ -62,12 +62,12 @@ def member_team_post_command():
             if deleted:
                 return jsonify({
                     'success': True,
-                    'response': f'{user}님의 팀 배정이 삭제되었습니다.'
+                    'response': f'{member}님의 팀 배정이 삭제되었습니다.'
                 }), 200
             else:
                 return jsonify({
                     'success': False,
-                    'response': f'{user}님은 팀에 배정되어 있지 않습니다.'
+                    'response': f'{member}님은 팀에 배정되어 있지 않습니다.'
                 }), 200
 
         # team 파라미터가 있으면 팀 배정
@@ -75,7 +75,7 @@ def member_team_post_command():
             redis_client.set(key, team)
             return jsonify({
                 'success': True,
-                'response': f'{user}님이 {team}팀에 배정되었습니다.'
+                'response': f'{member}님이 {team}팀에 배정되었습니다.'
             }), 200
 
     except Exception as e:

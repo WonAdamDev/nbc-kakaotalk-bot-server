@@ -49,8 +49,13 @@ def create_app(config_class=Config):
     app.register_blueprint(commands.bp)
     app.register_blueprint(member_commands.bp)
 
+    from flask import request
+    
     @app.route('/health', methods=['POST'])
     def health_check():
+        data = request.get_json()
+        print(f"[HEALTH] Received JSON: {data}")
+
         redis_status = 'ok'
         try:
             if redis_client:

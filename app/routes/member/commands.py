@@ -3,6 +3,80 @@ from app import redis_client
 
 bp = Blueprint('member_commands', __name__, url_prefix='/api/commands/member')
 
+def make_team_key(room, member):
+    return f"room:{room}:member:{member}:team"
+
+def make_member_key(room, member):
+    return f"room:{room}:member:{member}"
+
+@bp.route('/', methods=['GET'])
+def member_get_command():
+    if not redis_client:
+        return jsonify({
+            'success': False,
+            'response': 'Redis 서버에 연결할 수 없습니다.'
+        }), 500
+
+    # GET 요청: 쿼리 스트링에서 파라미터 읽기
+    room = request.args.get('room', 'unknown')
+    member = request.args.get('member', 'unknown')
+
+    print(f"[TEAM GET] Query params: room={room}, member={member}")
+
+    try:
+        key = make_member_key(room, member)
+        member = redis_client.get(key)
+
+        if member:
+            team_key = make_team_key(room, member)
+            team = redis_client.get(team_key)
+
+            if not team:
+                team = "undefined"
+
+            return jsonify({
+                'success': True,
+                'response': f'{member}님 정보\n팀: {team}'
+            }), 200
+        else:
+            return jsonify({
+                'success': False,
+                'response': f'{member}님은 멤버가 아닙니다.'
+            }), 200
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'response': f'오류가 발생했습니다: {str(e)}'
+        }), 500
+    
+@bp.route('/', methods=['POST'])
+def member_post_command():
+    if not redis_client:
+        return jsonify({
+            'success': False,
+            'response': 'Redis 서버에 연결할 수 없습니다.'
+        }), 500
+
+    data = request.get_json()
+    print(f"[TEAM POST] Received JSON: {data}")
+
+    room = data.get('room', 'unknown')
+    member = data.get('member', 'unknown')
+
+    try:
+        key = make_member_key(room, member)
+        redis_client.set(key, member)
+        return jsonify({
+            'success': True,
+            'response': f'{member}님이 멤버가 되었습니다.'
+        }), 200
+
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'response': f'오류가 발생했습니다: {str(e)}'
+        }), 500
+
 @bp.route('/team', methods=['GET'])
 def member_team_get_command():
     if not redis_client:
@@ -12,13 +86,13 @@ def member_team_get_command():
         }), 500
 
     # GET 요청: 쿼리 스트링에서 파라미터 읽기
-    member = request.args.get('member', 'unknown')
     room = request.args.get('room', 'unknown')
+    member = request.args.get('member', 'unknown')
 
-    print(f"[TEAM GET] Query params: member={member}, room={room}")
+    print(f"[TEAM GET] Query params: room={room}, member={member}")
 
     try:
-        key = f"room:{room}:member:{member}:team"
+        key = make_team_key(room, member)
         team = redis_client.get(key)
 
         if team:
@@ -49,12 +123,12 @@ def member_team_post_command():
     data = request.get_json()
     print(f"[TEAM POST] Received JSON: {data}")
 
-    member = data.get('member', 'unknown')
     room = data.get('room', 'unknown')
+    member = data.get('member', 'unknown')
     team = data.get('team')  # 기본값 없이 가져오기
 
     try:
-        key = f"room:{room}:member:{member}:team"
+        key = make_team_key(room, member)
 
         # team 파라미터가 없으면 팀 배정 삭제
         if team is None:

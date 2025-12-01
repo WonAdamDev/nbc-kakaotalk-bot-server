@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify
-from app import redis_client
+from app import cache_manager
 
 bp = Blueprint('commands', __name__, url_prefix='/api/commands')
 

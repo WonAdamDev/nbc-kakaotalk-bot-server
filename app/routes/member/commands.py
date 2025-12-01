@@ -1,20 +1,20 @@
 from flask import Blueprint, request, jsonify
-from app import redis_client
+from app import cache_manager
 
 bp = Blueprint('member_commands', __name__, url_prefix='/api/commands/member')
 
-def make_team_key(room, member):
-    return f"room:{room}:member:{member}:team"
+def make_team_key(room, team):
+    return f"room:{room}:team:{team}:"
 
 def make_member_key(room, member):
     return f"room:{room}:member:{member}"
 
 @bp.route('/', methods=['GET'])
 def member_get_command():
-    if not redis_client:
+    if not cache_manager:
         return jsonify({
             'success': False,
-            'response': 'Redis 서버에 연결할 수 없습니다.'
+            'response': '캐시 시스템을 사용할 수 없습니다.'
         }), 500
 
     # GET 요청: 쿼리 스트링에서 파라미터 읽기
@@ -25,11 +25,11 @@ def member_get_command():
 
     try:
         member_key = make_member_key(query_room, query_member)
-        member = redis_client.get(member_key)
+        member = cache_manager.get('members', member_key)
 
         if member:
-            team_key = make_team_key(query_room, query_member)
-            team = redis_client.get(team_key)
+            team_key = make_member_key(query_room, query_member)
+            team = cache_manager.get('teams', team_key)
 
             if not team:
                 team = "undefined"
@@ -51,10 +51,10 @@ def member_get_command():
     
 @bp.route('/', methods=['POST'])
 def member_post_command():
-    if not redis_client:
+    if not cache_manager:
         return jsonify({
             'success': False,
-            'response': 'Redis 서버에 연결할 수 없습니다.'
+            'response': '캐시 시스템을 사용할 수 없습니다.'
         }), 500
 
     data = request.get_json()
@@ -65,7 +65,7 @@ def member_post_command():
 
     try:
         key = make_member_key(request_room, request_member)
-        redis_client.set(key, request_member)
+        cache_manager.set('members', key, request_member)
         return jsonify({
             'success': True,
             'response': f'{request_member}님이 멤버가 되었습니다.'
@@ -79,10 +79,10 @@ def member_post_command():
     
 @bp.route('/', methods=['DELETE'])
 def member_delete_command():
-    if not redis_client:
+    if not cache_manager:
         return jsonify({
             'success': False,
-            'response': 'Redis 서버에 연결할 수 없습니다.'
+            'response': '캐시 시스템을 사용할 수 없습니다.'
         }), 500
 
     data = request.get_json()
@@ -93,9 +93,8 @@ def member_delete_command():
 
     try:
         member_key = make_member_key(request_room, request_member)
-        team_key = make_team_key(request_room, request_member)
-        redis_client.delete(member_key)
-        redis_client.delete(team_key)
+        cache_manager.delete('members', member_key)
+        cache_manager.delete('teams', member_key)
         return jsonify({
             'success': True,
             'response': f'{request_member}님이 멤버에서 제거되었습니다.'
@@ -109,10 +108,10 @@ def member_delete_command():
 
 @bp.route('/team/', methods=['GET'])
 def member_team_get_command():
-    if not redis_client:
+    if not cache_manager:
         return jsonify({
             'success': False,
-            'response': 'Redis 서버에 연결할 수 없습니다.'
+            'response': '캐시 시스템을 사용할 수 없습니다.'
         }), 500
 
     # GET 요청: 쿼리 스트링에서 파라미터 읽기
@@ -123,11 +122,10 @@ def member_team_get_command():
 
     try:
         member_key = make_member_key(request_room, request_member)
-        member = redis_client.get(member_key)
+        member = cache_manager.get('members', member_key)
 
         if member:
-            team_key = make_team_key(request_room, request_member)
-            team = redis_client.get(team_key)
+            team = cache_manager.get('teams', member_key)
 
             if team:
                 return jsonify({
@@ -153,10 +151,10 @@ def member_team_get_command():
 
 @bp.route('/team/', methods=['POST'])
 def member_team_post_command():
-    if not redis_client:
+    if not cache_manager:
         return jsonify({
             'success': False,
-            'response': 'Redis 서버에 연결할 수 없습니다.'
+            'response': '캐시 시스템을 사용할 수 없습니다.'
         }), 500
 
     data = request.get_json()
@@ -168,15 +166,14 @@ def member_team_post_command():
 
     try:
         member_key = make_member_key(request_room, request_member)
-        member = redis_client.get(member_key)
+        member = cache_manager.get('members', member_key)
 
         if member:
-            team_key = make_team_key(request_room, request_member)
-
             # team 파라미터가 없으면 팀 배정 삭제
             if request_team is None:
-                deleted = redis_client.delete(team_key)
-                if deleted:
+                existing_team = cache_manager.get('teams', member_key)
+                cache_manager.delete('teams', member_key)
+                if existing_team:
                     return jsonify({
                         'success': True,
                         'response': f'{request_member}님의 팀 배정이 삭제되었습니다.'
@@ -189,7 +186,7 @@ def member_team_post_command():
 
             # team 파라미터가 있으면 팀 배정
             else:
-                redis_client.set(team_key, request_team)
+                cache_manager.set('teams', member_key, request_team)
                 return jsonify({
                     'success': True,
                     'response': f'{request_member}님이 {request_team}팀에 배정되었습니다.'

@@ -3,10 +3,15 @@ from flask_cors import CORS
 from redis import Redis
 from pymongo import MongoClient
 from config import Config
+from app.cache_manager import CacheManager
+import atexit
+import signal
+import sys
 
 redis_client = None
 mongo_client = None
 mongo_db = None
+cache_manager = None
 
 def create_app(config_class=Config):
     app = Flask(__name__)
@@ -42,6 +47,37 @@ def create_app(config_class=Config):
         print(f"[WARNING] MongoDB connection failed: {e}")
         mongo_client = None
         mongo_db = None
+
+    # CacheManager 초기화
+    global cache_manager
+    if redis_client and mongo_db:
+        cache_manager = CacheManager(redis_client, mongo_db)
+        # 서버 시작 시 MongoDB → Redis 캐시 로드
+        print("[CacheManager] Loading data from MongoDB to Redis...")
+        cache_manager.load_all_to_cache()
+
+        # Graceful Shutdown 핸들러 등록
+        def shutdown_handler(signum=None, frame=None):
+            """서버 종료 시 모든 백그라운드 작업 완료 후 종료"""
+            print("\n[Shutdown] Graceful shutdown initiated...")
+            if cache_manager:
+                success = cache_manager.shutdown(timeout=30)
+                if success:
+                    print("[Shutdown] All tasks completed successfully")
+                else:
+                    print("[Shutdown] Some tasks were lost due to timeout")
+            sys.exit(0)
+
+        # atexit: 정상 종료 시 (Ctrl+C, 프로그램 종료)
+        atexit.register(shutdown_handler)
+
+        # signal: SIGTERM, SIGINT 처리 (Railway, Docker 등)
+        signal.signal(signal.SIGTERM, shutdown_handler)
+        signal.signal(signal.SIGINT, shutdown_handler)
+
+        print("[Shutdown] Graceful shutdown handlers registered")
+    else:
+        print("[WARNING] CacheManager not initialized (Redis or MongoDB unavailable)")
 
     from app.routes import commands
     from app.routes.member import commands as member_commands

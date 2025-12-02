@@ -271,9 +271,12 @@ class CacheManager:
             try:
                 serialized = json.dumps(value) if isinstance(value, (dict, list)) else value
                 self.redis.setex(redis_key, ttl, serialized)
+                print(f"[CacheManager] Redis SET success: {redis_key} = {value} (TTL: {ttl}s)")
             except Exception as e:
                 print(f"[CacheManager] Redis SET error: {e}")
                 return False
+        else:
+            print(f"[CacheManager] Redis not available, skipping SET for {redis_key}")
 
         # 2. MongoDB 저장 작업을 백그라운드 큐에 추가
         if self.mongo_db is not None:

@@ -218,10 +218,13 @@ class CacheManager:
             try:
                 cached = self.redis.get(redis_key)
                 if cached is not None:
+                    print(f"[CacheManager] Redis GET hit: {redis_key} = {cached}")
                     try:
                         return json.loads(cached)
                     except json.JSONDecodeError:
                         return cached
+                else:
+                    print(f"[CacheManager] Redis GET miss: {redis_key}")
             except Exception as e:
                 print(f"[CacheManager] Redis GET error: {e}")
 
@@ -231,6 +234,7 @@ class CacheManager:
                 doc = self.mongo_db[collection].find_one({"_id": key})
                 if doc and "value" in doc:
                     value = doc["value"]
+                    print(f"[CacheManager] MongoDB GET hit: {collection}.{key} = {value}")
                     # Redis에 캐시
                     if self.redis:
                         try:
@@ -239,12 +243,16 @@ class CacheManager:
                                 3600,  # 1시간 TTL
                                 json.dumps(value) if isinstance(value, (dict, list)) else value
                             )
+                            print(f"[CacheManager] Cached to Redis: {redis_key}")
                         except Exception as e:
                             print(f"[CacheManager] Redis cache error: {e}")
                     return value
+                else:
+                    print(f"[CacheManager] MongoDB GET miss: {collection}.{key}")
             except Exception as e:
                 print(f"[CacheManager] MongoDB GET error: {e}")
 
+        print(f"[CacheManager] GET returned default for {redis_key}")
         return default
 
     def set(self, collection: str, key: str, value: Any, ttl: Optional[int] = None) -> bool:

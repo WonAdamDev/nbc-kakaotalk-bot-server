@@ -50,7 +50,7 @@ def create_app(config_class=Config):
 
     # CacheManager 초기화
     global cache_manager
-    if redis_client and mongo_db:
+    if redis_client is not None and mongo_db is not None:
         cache_manager = CacheManager(redis_client, mongo_db)
         # 서버 시작 시 MongoDB → Redis 캐시 로드
         print("[CacheManager] Loading data from MongoDB to Redis...")

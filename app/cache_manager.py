@@ -180,7 +180,7 @@ class CacheManager:
         self.task_queue = TaskQueue()
 
         # 백그라운드 워커 시작
-        if mongo_db:
+        if mongo_db is not None:
             self.task_queue.start(mongo_db)
 
     def shutdown(self, timeout=30):
@@ -226,7 +226,7 @@ class CacheManager:
                 print(f"[CacheManager] Redis GET error: {e}")
 
         # 2. Redis에 없으면 MongoDB에서 조회
-        if self.mongo_db:
+        if self.mongo_db is not None:
             try:
                 doc = self.mongo_db[collection].find_one({"_id": key})
                 if doc and "value" in doc:
@@ -276,7 +276,7 @@ class CacheManager:
                 return False
 
         # 2. MongoDB 저장 작업을 백그라운드 큐에 추가
-        if self.mongo_db:
+        if self.mongo_db is not None:
             task = DBTask(TaskType.SET, collection, key, value)
             self.task_queue.add_task(task)
 
@@ -303,7 +303,7 @@ class CacheManager:
                 print(f"[CacheManager] Redis DELETE error: {e}")
 
         # 2. MongoDB 삭제 작업을 백그라운드 큐에 추가
-        if self.mongo_db:
+        if self.mongo_db is not None:
             task = DBTask(TaskType.DELETE, collection, key)
             self.task_queue.add_task(task)
 
@@ -336,7 +336,7 @@ class CacheManager:
                 print(f"[CacheManager] Redis INCREMENT error: {e}")
 
         # 2. MongoDB 증가 작업을 백그라운드 큐에 추가
-        if self.mongo_db:
+        if self.mongo_db is not None:
             task = DBTask(TaskType.INCREMENT, collection, key, field=field, amount=amount)
             self.task_queue.add_task(task)
 
@@ -367,7 +367,7 @@ class CacheManager:
                 print(f"[CacheManager] Redis HGETALL error: {e}")
 
         # MongoDB에서 조회
-        if self.mongo_db:
+        if self.mongo_db is not None:
             try:
                 doc = self.mongo_db[collection].find_one({"_id": key})
                 if doc and "value" in doc:
@@ -381,7 +381,7 @@ class CacheManager:
         """
         서버 시작 시 MongoDB의 모든 데이터를 Redis로 로드
         """
-        if not self.mongo_db or not self.redis:
+        if self.mongo_db is None or self.redis is None:
             print("[CacheManager] MongoDB or Redis not available for cache loading")
             return
 

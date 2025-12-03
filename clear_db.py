@@ -30,9 +30,9 @@ def clear_mongo():
     """MongoDB 클리어"""
     try:
         from pymongo import MongoClient
-        mongo_url = os.environ.get('MONGO_URL')
+        mongo_url = os.environ.get('MONGO_URI')
         if not mongo_url:
-            print("❌ MONGO_URL 환경 변수가 없습니다.")
+            print("❌ MONGO_URI 환경 변수가 없습니다.")
             return False
 
         client = MongoClient(mongo_url)

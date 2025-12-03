@@ -1,6 +1,5 @@
 from flask import Blueprint, request, jsonify
 from app import cache_manager
-from member import make_member_key
 
 bp = Blueprint('team_commands', __name__, url_prefix='/api/commands/team')
 

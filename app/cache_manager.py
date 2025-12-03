@@ -388,6 +388,82 @@ class CacheManager:
 
         return {}
 
+    def find_keys_by_value(self, collection: str, target_value: Any) -> list:
+        """
+        특정 value를 가진 key들을 찾기
+
+        Args:
+            collection: 컬렉션 이름
+            target_value: 찾을 값
+
+        Returns:
+            해당 값을 가진 key들의 리스트
+        """
+        matching_keys = []
+
+        # 1. MongoDB에서 검색 (더 효율적인 쿼리)
+        if self.mongo_db is not None:
+            try:
+                mongo_collection = self.mongo_db[collection]
+                documents = mongo_collection.find({"value": target_value})
+
+                for doc in documents:
+                    key = doc.get("_id")
+                    if key:
+                        matching_keys.append(key)
+                        print(f"[CacheManager] Found key '{key}' with value '{target_value}' in MongoDB")
+
+                if matching_keys:
+                    print(f"[CacheManager] Found {len(matching_keys)} keys in {collection} with value '{target_value}'")
+                    return matching_keys
+                else:
+                    print(f"[CacheManager] No keys found in MongoDB for {collection} with value '{target_value}'")
+            except Exception as e:
+                print(f"[CacheManager] MongoDB find_keys_by_value error: {e}")
+
+        # 2. MongoDB가 없거나 실패한 경우 Redis에서 검색
+        if self.redis:
+            try:
+                pattern = f"{collection}:*"
+                cursor = 0
+
+                # SCAN으로 키 패턴 검색
+                while True:
+                    cursor, keys = self.redis.scan(cursor, match=pattern, count=100)
+
+                    for redis_key in keys:
+                        try:
+                            cached = self.redis.get(redis_key)
+                            if cached is not None:
+                                # JSON 파싱 시도
+                                try:
+                                    value = json.loads(cached)
+                                except json.JSONDecodeError:
+                                    value = cached
+
+                                # 값 비교
+                                if value == target_value:
+                                    # Redis 키에서 collection 제거하여 실제 키만 추출
+                                    actual_key = redis_key.decode('utf-8') if isinstance(redis_key, bytes) else redis_key
+                                    actual_key = actual_key.replace(f"{collection}:", "", 1)
+                                    if actual_key not in matching_keys:
+                                        matching_keys.append(actual_key)
+                                        print(f"[CacheManager] Found key '{actual_key}' with value '{target_value}' in Redis")
+                        except Exception as e:
+                            print(f"[CacheManager] Error checking key {redis_key}: {e}")
+
+                    if cursor == 0:
+                        break
+
+                print(f"[CacheManager] Found {len(matching_keys)} keys in Redis for {collection} with value '{target_value}'")
+            except Exception as e:
+                print(f"[CacheManager] Redis find_keys_by_value error: {e}")
+
+        if not matching_keys:
+            print(f"[CacheManager] No keys found for {collection} with value '{target_value}'")
+
+        return matching_keys
+
     def load_all_to_cache(self):
         """
         서버 시작 시 MongoDB의 모든 데이터를 Redis로 로드

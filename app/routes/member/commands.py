@@ -3,9 +3,6 @@ from app import cache_manager
 
 bp = Blueprint('member_commands', __name__, url_prefix='/api/commands/member')
 
-def make_team_key(room, team):
-    return f"room:{room}:team:{team}:"
-
 def make_member_key(room, member):
     return f"room:{room}:member:{member}"
 
@@ -21,7 +18,7 @@ def member_get_command():
     query_room = request.args.get('room', 'unknown')
     query_member = request.args.get('member', 'unknown')
 
-    print(f"[TEAM GET] Query params: room={query_room}, member={query_member}")
+    print(f"[MEMBER GET] Query params: room={query_room}, member={query_member}")
 
     try:
         member_key = make_member_key(query_room, query_member)
@@ -29,7 +26,7 @@ def member_get_command():
 
         if member:
             team_key = make_member_key(query_room, query_member)
-            team = cache_manager.get('teams', team_key)
+            team = cache_manager.get('member_teams', team_key)
 
             if not team:
                 team = "undefined"
@@ -58,7 +55,7 @@ def member_post_command():
         }), 500
 
     data = request.get_json()
-    print(f"[TEAM POST] Received JSON: {data}")
+    print(f"[MEMBER POST] Received JSON: {data}")
 
     request_room = data.get('room', 'unknown')
     request_member = data.get('member', 'unknown')
@@ -86,7 +83,7 @@ def member_delete_command():
         }), 500
 
     data = request.get_json()
-    print(f"[TEAM POST] Received JSON: {data}")
+    print(f"[MEMBER DELETE] Received JSON: {data}")
 
     request_room = data.get('room', 'unknown')
     request_member = data.get('member', 'unknown')
@@ -94,7 +91,7 @@ def member_delete_command():
     try:
         member_key = make_member_key(request_room, request_member)
         cache_manager.delete('members', member_key)
-        cache_manager.delete('teams', member_key)
+        cache_manager.delete('member_teams', member_key)
         return jsonify({
             'success': True,
             'response': f'{request_member}님이 멤버에서 제거되었습니다.'
@@ -118,14 +115,14 @@ def member_team_get_command():
     request_room = request.args.get('room', 'unknown')
     request_member = request.args.get('member', 'unknown')
 
-    print(f"[TEAM GET] Query params: room={request_room}, member={request_member}")
+    print(f"[MEMBER / TEAM GET] Query params: room={request_room}, member={request_member}")
 
     try:
         member_key = make_member_key(request_room, request_member)
         member = cache_manager.get('members', member_key)
 
         if member:
-            team = cache_manager.get('teams', member_key)
+            team = cache_manager.get('member_teams', member_key)
 
             if team:
                 return jsonify({
@@ -148,7 +145,6 @@ def member_team_get_command():
             'response': f'오류가 발생했습니다: {str(e)}'
         }), 500
     
-
 @bp.route('/team/', methods=['POST'])
 def member_team_post_command():
     if not cache_manager:
@@ -158,7 +154,7 @@ def member_team_post_command():
         }), 500
 
     data = request.get_json()
-    print(f"[TEAM POST] Received JSON: {data}")
+    print(f"[MEMBER / TEAM POST] Received JSON: {data}")
 
     request_room = data.get('room', 'unknown')
     request_member = data.get('member', 'unknown')
@@ -171,8 +167,8 @@ def member_team_post_command():
         if member:
             # team 파라미터가 없으면 팀 배정 삭제
             if request_team is None:
-                existing_team = cache_manager.get('teams', member_key)
-                cache_manager.delete('teams', member_key)
+                existing_team = cache_manager.get('member_teams', member_key)
+                cache_manager.delete('member_teams', member_key)
                 if existing_team:
                     return jsonify({
                         'success': True,
@@ -186,7 +182,7 @@ def member_team_post_command():
 
             # team 파라미터가 있으면 팀 배정
             else:
-                cache_manager.set('teams', member_key, request_team)
+                cache_manager.set('member_teams', member_key, request_team)
                 return jsonify({
                     'success': True,
                     'response': f'{request_member}님이 {request_team}팀에 배정되었습니다.'

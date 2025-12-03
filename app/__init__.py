@@ -81,9 +81,11 @@ def create_app(config_class=Config):
 
     from app.routes import commands
     from app.routes.member import commands as member_commands
+    from app.routes.team import commands as team_commands
 
     app.register_blueprint(commands.bp)
     app.register_blueprint(member_commands.bp)
+    app.register_blueprint(team_commands.bp)
 
     from flask import request
     

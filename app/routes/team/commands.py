@@ -129,6 +129,14 @@ def team_delete_command():
         else:
             # 멤버가 없으면 팀 삭제
             cache_manager.delete('teams', team_key)
+
+            # 안전을 위해 혹시 남아있을 수 있는 member_teams 정리
+            # (고아 데이터 방지)
+            member_keys_cleanup = cache_manager.find_keys_by_value('member_teams', request_team)
+            for member_key in member_keys_cleanup:
+                cache_manager.delete('member_teams', member_key)
+                print(f"[TEAM DELETE] Cleaned up orphaned member_team: {member_key}")
+
             return jsonify({
                 'success': True,
                 'response': f'{request_team}팀이 삭제되었습니다.'

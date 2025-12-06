@@ -44,3 +44,7 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Team data (개인정보 포함)
+team.xlsx
+*.xlsx

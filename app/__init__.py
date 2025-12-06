@@ -57,8 +57,8 @@ def create_app(config_class=Config):
         cache_manager.load_all_to_cache()
 
         # Graceful Shutdown 핸들러 등록
-        def shutdown_handler(signum=None, frame=None):
-            """서버 종료 시 모든 백그라운드 작업 완료 후 종료"""
+        def cleanup_tasks():
+            """백그라운드 작업 정리 (atexit용)"""
             print("\n[Shutdown] Graceful shutdown initiated...")
             if cache_manager:
                 success = cache_manager.shutdown(timeout=30)
@@ -66,14 +66,19 @@ def create_app(config_class=Config):
                     print("[Shutdown] All tasks completed successfully")
                 else:
                     print("[Shutdown] Some tasks were lost due to timeout")
+            # atexit에서는 sys.exit() 호출하지 않음
+
+        def signal_handler(signum=None, frame=None):
+            """Signal 핸들러 (SIGTERM, SIGINT용)"""
+            cleanup_tasks()
             sys.exit(0)
 
         # atexit: 정상 종료 시 (Ctrl+C, 프로그램 종료)
-        atexit.register(shutdown_handler)
+        atexit.register(cleanup_tasks)
 
         # signal: SIGTERM, SIGINT 처리 (Railway, Docker 등)
-        signal.signal(signal.SIGTERM, shutdown_handler)
-        signal.signal(signal.SIGINT, shutdown_handler)
+        signal.signal(signal.SIGTERM, signal_handler)
+        signal.signal(signal.SIGINT, signal_handler)
 
         print("[Shutdown] Graceful shutdown handlers registered")
     else:

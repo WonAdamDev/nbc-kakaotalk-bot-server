@@ -9,11 +9,15 @@ import os
 import sys
 
 def main():
-    from app import create_app, cache_manager
-    from app.seed import seed_from_excel
-
-    # Flask 앱 생성 (CacheManager 초기화를 위해)
+    # Flask 앱 먼저 생성
+    from app import create_app
     app = create_app()
+
+    # create_app() 후에 cache_manager import (초기화된 후)
+    import app as app_module
+    cache_manager = app_module.cache_manager
+
+    from app.seed import seed_from_excel
 
     with app.app_context():
         # 환경 변수에서 파일 경로 읽기

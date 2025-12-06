@@ -12,7 +12,3 @@ class Config:
 
     MONGO_URI = os.environ.get('MONGO_URI') or 'mongodb://localhost:27017/'
     MONGO_DB_NAME = os.environ.get('MONGO_DB_NAME') or 'nbc_kakaotalk_bot'
-
-    # Seeding 설정
-    ENABLE_SEED = os.environ.get('ENABLE_SEED', 'False') == 'True'
-    SEED_FILE_PATH = os.environ.get('SEED_FILE_PATH', 'team.xlsx')

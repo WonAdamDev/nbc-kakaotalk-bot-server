@@ -1,8 +1,15 @@
-# 기본 설정 (Seed 없이 서버만 실행)
-# web: gunicorn -w 4 -b 0.0.0.0:$PORT "app:create_app()"
+# NBC KakaoTalk Bot - API Server
+#
+# Seed 기능은 별도의 db-seeder 서비스로 분리되었습니다.
+# 서버는 API 처리만 담당합니다.
+#
+# Railway 배포 방법:
+# 1. 환경 변수 설정:
+#    - SECRET_KEY: 랜덤 문자열
+#    - DEBUG: False (프로덕션)
+#    - REDIS_URL: Redis 서비스의 REDIS_URL 참조
+#    - MONGO_URI: MongoDB 서비스의 MONGO_URI 참조
+#    - MONGO_DB_NAME: nbc_kakaotalk_bot
+# 2. 자동 배포됨
 
-# Base64 → Volume 업로드 + Seed + 서버 실행 (현재 사용 중)
-# 1. upload_to_volume.py: 환경 변수에서 Base64 디코딩하여 /data/team.xlsx 저장
-# 2. seed_script.py: /data/team.xlsx로 DB seed
-# 3. gunicorn: 서버 시작
-web: python upload_to_volume.py && python seed_script.py && gunicorn -w 4 -b 0.0.0.0:$PORT "app:create_app()"
+web: gunicorn -w 4 -b 0.0.0.0:$PORT "app:create_app()"

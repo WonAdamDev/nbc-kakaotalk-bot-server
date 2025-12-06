@@ -5,7 +5,6 @@
 #
 # Railway 배포 방법:
 # 1. 환경 변수 설정:
-#    - SECRET_KEY: 랜덤 문자열
 #    - DEBUG: False (프로덕션)
 #    - REDIS_URL: Redis 서비스의 REDIS_URL 참조
 #    - MONGO_URI: MongoDB 서비스의 MONGO_URI 참조

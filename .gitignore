@@ -48,3 +48,7 @@ Thumbs.db
 # Team data (개인정보 포함)
 team.xlsx
 *.xlsx
+
+# Base64 encoded files (민감 데이터 포함)
+team_base64.txt
+*_base64.txt

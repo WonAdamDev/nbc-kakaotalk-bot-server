@@ -1,9 +1,8 @@
-import argparse
 import sys
 from app import create_app, cache_manager
 from config import Config
 
-def run_seed(excel_path='team.xlsx'):
+def run_seed(excel_path):
     """Seed 실행 함수"""
     from app.seed import seed_from_excel
 
@@ -23,31 +22,19 @@ def run_seed(excel_path='team.xlsx'):
         return False
 
 if __name__ == '__main__':
-    # 명령줄 인자 파싱
-    parser = argparse.ArgumentParser(description='NBC KakaoTalk Bot Server')
-    parser.add_argument(
-        '--seed',
-        action='store_true',
-        help='team.xlsx 파일로 DB를 seed합니다'
-    )
-    parser.add_argument(
-        '--seed-file',
-        type=str,
-        default='team.xlsx',
-        help='Seed에 사용할 Excel 파일 경로 (기본값: team.xlsx)'
-    )
-
-    args = parser.parse_args()
-
     # Flask 앱 생성
     app = create_app()
 
-    # Seed 모드
-    if args.seed:
-        success = run_seed(args.seed_file)
+    # 환경 변수로 Seed 여부 확인
+    if Config.ENABLE_SEED:
+        print(f"[INFO] ENABLE_SEED=True, starting seed process...")
+        success = run_seed(Config.SEED_FILE_PATH)
         if not success:
-            sys.exit(1)  # Seed 실패 시 종료 코드 1
-        print("[INFO] Seed 완료. 서버를 계속 실행합니다...\n")
+            print("[WARNING] Seed failed, but server will continue...")
+        else:
+            print("[INFO] Seed 완료. 서버를 계속 실행합니다...\n")
+    else:
+        print(f"[INFO] ENABLE_SEED=False, skipping seed process")
 
     # 서버 실행
     print(f"\n서버 주소: http://{Config.HOST}:{Config.PORT}")

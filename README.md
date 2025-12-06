@@ -46,24 +46,28 @@ Excel 파일 형식:
 
 자세한 형식은 `TEAM_XLSX_FORMAT.md` 참고
 
-#### 4.2. Seed 실행
+#### 4.2. Seed 활성화
 
+`.env` 파일에서 설정:
 ```bash
-# team.xlsx 파일로 seed
-python app.py --seed
+ENABLE_SEED=True
+SEED_FILE_PATH=team.xlsx
+```
 
-# 또는 다른 파일 사용
-python app.py --seed --seed-file my_data.xlsx
+또는 환경 변수로 직접 설정:
+```bash
+# Windows (PowerShell)
+$env:ENABLE_SEED="True"
+
+# Linux/Mac
+export ENABLE_SEED=True
 ```
 
 ### 5. 서버 실행
 
 ```bash
-# Seed 없이 서버만 실행
+# 서버 실행 (ENABLE_SEED 환경 변수에 따라 자동으로 seed 실행)
 python app.py
-
-# Seed와 함께 서버 실행
-python app.py --seed
 ```
 
 서버는 기본적으로 `http://localhost:5000`에서 실행됩니다.

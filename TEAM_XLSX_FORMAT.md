@@ -36,15 +36,15 @@ NBC,박민수,
 ### 1. 로컬 개발 환경
 
 ```bash
-# team.xlsx 파일 생성 후
+# .env 파일 생성 또는 수정
+# ENABLE_SEED=True
+# SEED_FILE_PATH=team.xlsx
 
-# Seed 실행
-python app.py --seed
+# 또는 환경 변수로 직접 설정
+export ENABLE_SEED=True
+export SEED_FILE_PATH=team.xlsx
 
-# 또는 다른 파일명 사용
-python app.py --seed --seed-file my_team_data.xlsx
-
-# Seed 없이 서버만 실행
+# 서버 실행 (자동으로 seed 실행됨)
 python app.py
 ```
 

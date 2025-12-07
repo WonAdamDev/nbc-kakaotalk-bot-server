@@ -23,16 +23,39 @@ def create_app(config_class=Config):
     # CORS 설정 (프론트엔드 URL 허용)
     cors_origins = [
         "http://localhost:3000",  # 로컬 개발
+        "http://localhost:5173",  # Vite 개발 서버
         app.config.get('FRONTEND_URL', 'http://localhost:3000')  # 프로덕션
     ]
-    CORS(app, origins=cors_origins)
+
+    # Vercel 배포 도메인 패턴 허용
+    # Vercel은 프리뷰 배포마다 다른 URL을 생성하므로 정규식 패턴 사용
+    import re
+    vercel_pattern = re.compile(r'https://.*\.vercel\.app$')
+
+    def is_allowed_origin(origin, allowed_origins):
+        """CORS origin 검증 (정규식 패턴 지원)"""
+        if origin in allowed_origins:
+            return True
+        # Vercel 도메인 체크
+        if vercel_pattern.match(origin or ''):
+            return True
+        return False
+
+    # CORS 설정 with custom origin checker
+    from flask_cors import cross_origin
+    CORS(app,
+         origins=lambda origin: is_allowed_origin(origin, cors_origins),
+         supports_credentials=True,
+         allow_headers=['Content-Type', 'Authorization']
+    )
 
     # PostgreSQL 초기화 (경기 데이터)
     db.init_app(app)
 
     # WebSocket 초기화 (CORS 설정 포함)
+    # Socket.io는 모든 Vercel 도메인 허용 (프리뷰 배포 지원)
     socketio.init_app(app,
-        cors_allowed_origins=cors_origins,
+        cors_allowed_origins="*",  # WebSocket은 추가 인증 필요 없으므로 개방
         async_mode='threading'
     )
 

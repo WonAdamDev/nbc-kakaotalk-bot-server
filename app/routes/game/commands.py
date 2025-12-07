@@ -88,6 +88,55 @@ def create_game():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@bp.route('/list', methods=['GET'])
+def list_games():
+    """
+    방별 경기 목록 조회
+    Query: ?room=카카오톡방이름
+    """
+    room = request.args.get('room')
+
+    if not room:
+        return jsonify({'success': False, 'error': 'room parameter is required'}), 400
+
+    try:
+        # 해당 방의 경기 목록 조회 (최신순, 최근 30일)
+        from datetime import timedelta
+        thirty_days_ago = date.today() - timedelta(days=30)
+
+        games = Game.query.filter(
+            Game.room == room,
+            Game.date >= thirty_days_ago
+        ).order_by(Game.created_at.desc()).all()
+
+        # 프론트엔드 URL
+        frontend_url = current_app.config['FRONTEND_URL']
+
+        games_data = []
+        for game in games:
+            games_data.append({
+                'game_id': game.game_id,
+                'url': f"{frontend_url}/game/{game.game_id}",
+                'creator': game.creator,
+                'date': game.date.isoformat() if game.date else None,
+                'created_at': game.created_at.isoformat() if game.created_at else None,
+                'status': game.status,
+                'current_quarter': game.current_quarter
+            })
+
+        return jsonify({
+            'success': True,
+            'data': {
+                'room': room,
+                'count': len(games_data),
+                'games': games_data
+            }
+        }), 200
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @bp.route('/<game_id>', methods=['GET'])
 def get_game(game_id):
     """

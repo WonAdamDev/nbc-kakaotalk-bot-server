@@ -21,30 +21,22 @@ def create_app(config_class=Config):
     app.config.from_object(config_class)
 
     # CORS 설정 (프론트엔드 URL 허용)
+    # 1. 기본 허용 도메인 (로컬 개발 + 프로덕션)
     cors_origins = [
-        "http://localhost:3000",  # 로컬 개발
+        "http://localhost:3000",  # 로컬 개발 (Express 서버)
         "http://localhost:5173",  # Vite 개발 서버
-        app.config.get('FRONTEND_URL', 'http://localhost:3000')  # 프로덕션
     ]
 
-    # Vercel 배포 도메인 패턴 허용
-    # Vercel은 프리뷰 배포마다 다른 URL을 생성하므로 정규식 패턴 사용
-    import re
-    vercel_pattern = re.compile(r'https://.*\.vercel\.app$')
+    # 2. 프로덕션 프론트엔드 URL 추가
+    frontend_url = app.config.get('FRONTEND_URL')
+    if frontend_url and frontend_url not in cors_origins:
+        cors_origins.append(frontend_url)
 
-    def is_allowed_origin(origin, allowed_origins):
-        """CORS origin 검증 (정규식 패턴 지원)"""
-        if origin in allowed_origins:
-            return True
-        # Vercel 도메인 체크
-        if vercel_pattern.match(origin or ''):
-            return True
-        return False
+    print(f"[CORS] Allowed origins: {cors_origins}")
 
-    # CORS 설정 with custom origin checker
-    from flask_cors import cross_origin
+    # 3. CORS 설정
     CORS(app,
-         origins=lambda origin: is_allowed_origin(origin, cors_origins),
+         resources={r"/*": {"origins": cors_origins}},
          supports_credentials=True,
          allow_headers=['Content-Type', 'Authorization']
     )
@@ -53,9 +45,9 @@ def create_app(config_class=Config):
     db.init_app(app)
 
     # WebSocket 초기화 (CORS 설정 포함)
-    # Socket.io는 모든 Vercel 도메인 허용 (프리뷰 배포 지원)
+    # REST API와 동일한 도메인만 허용
     socketio.init_app(app,
-        cors_allowed_origins="*",  # WebSocket은 추가 인증 필요 없으므로 개방
+        cors_allowed_origins=cors_origins,
         async_mode='threading'
     )
 

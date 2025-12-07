@@ -11,7 +11,7 @@ def team_get_command():
     if not cache_manager:
         return jsonify({
             'success': False,
-            'response': '캐시 시스템을 사용할 수 없습니다.'
+            'message': '캐시 시스템을 사용할 수 없습니다.'
         }), 500
 
     # GET 요청: 쿼리 스트링에서 파라미터 읽기
@@ -28,33 +28,34 @@ def team_get_command():
             # 팀에 속한 멤버들 조회
             member_keys = cache_manager.find_keys_by_value('member_teams', query_team)
 
-            if member_keys:
-                # 키에서 멤버 이름만 추출
-                members = []
-                for key in member_keys:
-                    # "room:A:member:철수" → "철수"
-                    member_name = key.split(':')[-1]
-                    members.append(member_name)
+            # 키에서 멤버 이름만 추출
+            members = []
+            for key in member_keys:
+                # "room:A:member:철수" → "철수"
+                member_name = key.split(':')[-1]
+                members.append(member_name)
 
-                member_list = ', '.join(members)
-                return jsonify({
-                    'success': True,
-                    'response': f'{query_team}팀 정보\n멤버 수: {len(members)}명\n멤버: {member_list}'
-                }), 200
-            else:
-                return jsonify({
-                    'success': True,
-                    'response': f'{query_team}팀 정보\n멤버 수: 0명'
-                }), 200
-        else:
             return jsonify({
                 'success': True,
-                'response': f'{query_team}팀은 존재하지 않습니다.'
+                'data': {
+                    'team': query_team,
+                    'member_count': len(members),
+                    'members': members,
+                    'exists': True
+                }
             }), 200
+        else:
+            return jsonify({
+                'success': False,
+                'data': {
+                    'team': query_team,
+                    'exists': False
+                }
+            }), 404
     except Exception as e:
         return jsonify({
             'success': False,
-            'response': f'오류가 발생했습니다: {str(e)}'
+            'message': f'오류가 발생했습니다: {str(e)}'
         }), 500
     
 @bp.route('/', methods=['POST'])
@@ -62,7 +63,7 @@ def team_post_command():
     if not cache_manager:
         return jsonify({
             'success': False,
-            'response': '캐시 시스템을 사용할 수 없습니다.'
+            'message': '캐시 시스템을 사용할 수 없습니다.'
         }), 500
 
     data = request.get_json()
@@ -77,19 +78,26 @@ def team_post_command():
 
         if team:
             return jsonify({
-                'success': True,
-                'response': f'{request_team}팀이 이미 존재합니다.'
-            }), 200
+                'success': False,
+                'data': {
+                    'team': request_team,
+                    'created': False,
+                    'reason': 'already_exists'
+                }
+            }), 400
         else:
             cache_manager.set('teams', key, request_team)
             return jsonify({
                 'success': True,
-                'response': f'{request_team}팀이 생성되었습니다.'
+                'data': {
+                    'team': request_team,
+                    'created': True
+                }
             }), 200
     except Exception as e:
         return jsonify({
             'success': False,
-            'response': f'오류가 발생했습니다: {str(e)}'
+            'message': f'오류가 발생했습니다: {str(e)}'
         }), 500
     
 @bp.route('/', methods=['DELETE'])
@@ -97,7 +105,7 @@ def team_delete_command():
     if not cache_manager:
         return jsonify({
             'success': False,
-            'response': '캐시 시스템을 사용할 수 없습니다.'
+            'message': '캐시 시스템을 사용할 수 없습니다.'
         }), 500
 
     data = request.get_json()
@@ -112,9 +120,13 @@ def team_delete_command():
 
         if not team:
             return jsonify({
-                'success': True,
-                'response': f'{request_team}팀은 존재하지 않습니다.'
-            }), 200
+                'success': False,
+                'data': {
+                    'team': request_team,
+                    'deleted': False,
+                    'reason': 'not_found'
+                }
+            }), 404
 
         # 팀에 배정된 멤버가 있는지 확인
         member_keys = cache_manager.find_keys_by_value('member_teams', request_team)
@@ -124,7 +136,12 @@ def team_delete_command():
             member_count = len(member_keys)
             return jsonify({
                 'success': False,
-                'response': f'{request_team}팀에 {member_count}명의 멤버가 있어 삭제할 수 없습니다.'
+                'data': {
+                    'team': request_team,
+                    'deleted': False,
+                    'reason': 'has_members',
+                    'member_count': member_count
+                }
             }), 400
         else:
             # 멤버가 없으면 팀 삭제
@@ -139,11 +156,14 @@ def team_delete_command():
 
             return jsonify({
                 'success': True,
-                'response': f'{request_team}팀이 삭제되었습니다.'
+                'data': {
+                    'team': request_team,
+                    'deleted': True
+                }
             }), 200
 
     except Exception as e:
         return jsonify({
             'success': False,
-            'response': f'오류가 발생했습니다: {str(e)}'
+            'message': f'오류가 발생했습니다: {str(e)}'
         }), 500

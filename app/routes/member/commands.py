@@ -11,7 +11,7 @@ def member_get_command():
     if not cache_manager:
         return jsonify({
             'success': False,
-            'response': '캐시 시스템을 사용할 수 없습니다.'
+            'message': '캐시 시스템을 사용할 수 없습니다.'
         }), 500
 
     # GET 요청: 쿼리 스트링에서 파라미터 읽기
@@ -27,22 +27,26 @@ def member_get_command():
         if member:
             team = cache_manager.get('member_teams', member_key)
 
-            if not team:
-                team = "undefined"
-
             return jsonify({
                 'success': True,
-                'response': f'{query_member}님 정보\n팀: {team}'
+                'data': {
+                    'member': query_member,
+                    'team': team,
+                    'exists': True
+                }
             }), 200
         else:
             return jsonify({
-                'success': True,
-                'response': f'{query_member}님은 멤버가 아닙니다.'
-            }), 200
+                'success': False,
+                'data': {
+                    'member': query_member,
+                    'exists': False
+                }
+            }), 404
     except Exception as e:
         return jsonify({
             'success': False,
-            'response': f'오류가 발생했습니다: {str(e)}'
+            'message': f'오류가 발생했습니다: {str(e)}'
         }), 500
     
 @bp.route('/', methods=['POST'])
@@ -50,7 +54,7 @@ def member_post_command():
     if not cache_manager:
         return jsonify({
             'success': False,
-            'response': '캐시 시스템을 사용할 수 없습니다.'
+            'message': '캐시 시스템을 사용할 수 없습니다.'
         }), 500
 
     data = request.get_json()
@@ -64,13 +68,15 @@ def member_post_command():
         cache_manager.set('members', key, request_member)
         return jsonify({
             'success': True,
-            'response': f'{request_member}님이 멤버가 되었습니다.'
+            'data': {
+                'member': request_member
+            }
         }), 200
 
     except Exception as e:
         return jsonify({
             'success': False,
-            'response': f'오류가 발생했습니다: {str(e)}'
+            'message': f'오류가 발생했습니다: {str(e)}'
         }), 500
     
 @bp.route('/', methods=['DELETE'])
@@ -78,7 +84,7 @@ def member_delete_command():
     if not cache_manager:
         return jsonify({
             'success': False,
-            'response': '캐시 시스템을 사용할 수 없습니다.'
+            'message': '캐시 시스템을 사용할 수 없습니다.'
         }), 500
 
     data = request.get_json()
@@ -93,11 +99,13 @@ def member_delete_command():
         cache_manager.delete('member_teams', member_key)
         return jsonify({
             'success': True,
-            'response': f'{request_member}님이 멤버에서 제거되었습니다.'
+            'data': {
+                'member': request_member
+            }
         }), 200
 
     except Exception as e:
         return jsonify({
             'success': False,
-            'response': f'오류가 발생했습니다: {str(e)}'
+            'message': f'오류가 발생했습니다: {str(e)}'
         }), 500

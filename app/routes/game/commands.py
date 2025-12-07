@@ -24,6 +24,20 @@ def emit_game_update(game_id, event_type, data):
     }, room=game_id)
 
 
+def get_frontend_url():
+    """프론트엔드 URL 가져오기 (https:// 자동 추가)"""
+    frontend_url = current_app.config['FRONTEND_URL']
+
+    # https:// 또는 http://가 없으면 https:// 추가
+    if not frontend_url.startswith('http://') and not frontend_url.startswith('https://'):
+        frontend_url = 'https://' + frontend_url
+
+    # 마지막 슬래시 제거
+    frontend_url = frontend_url.rstrip('/')
+
+    return frontend_url
+
+
 @bp.route('/create', methods=['POST'])
 def create_game():
     """
@@ -71,7 +85,7 @@ def create_game():
         db.session.commit()
 
         # 게임 URL 생성 (환경 변수에서 프론트엔드 URL 가져오기)
-        frontend_url = current_app.config['FRONTEND_URL']
+        frontend_url = get_frontend_url()
         game_url = f"{frontend_url}/game/{game_id}"
 
         return jsonify({
@@ -110,7 +124,7 @@ def list_games():
         ).order_by(Game.created_at.desc()).all()
 
         # 프론트엔드 URL
-        frontend_url = current_app.config['FRONTEND_URL']
+        frontend_url = get_frontend_url()
 
         games_data = []
         for game in games:

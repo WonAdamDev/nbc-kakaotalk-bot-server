@@ -114,13 +114,13 @@ def list_games():
         return jsonify({'success': False, 'error': 'room parameter is required'}), 400
 
     try:
-        # 해당 방의 경기 목록 조회 (최신순, 최근 30일)
+        # 해당 방의 경기 목록 조회 (최신순, 최근 7일)
         from datetime import timedelta
-        thirty_days_ago = date.today() - timedelta(days=30)
+        seven_days_ago = date.today() - timedelta(days=7)
 
         games = Game.query.filter(
             Game.room == room,
-            Game.date >= thirty_days_ago
+            Game.date >= seven_days_ago
         ).order_by(Game.created_at.desc()).all()
 
         # 프론트엔드 URL

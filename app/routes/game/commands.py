@@ -230,6 +230,34 @@ def get_all_games():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@bp.route('/rooms', methods=['GET'])
+def get_rooms():
+    """
+    모든 방 목록 조회 (중복 제거)
+    경기가 등록된 방들의 목록을 반환합니다.
+    """
+    try:
+        # 모든 방 이름을 중복 없이 조회 (room이 NULL이 아닌 경우만)
+        rooms = db.session.query(Game.room).filter(
+            Game.room.isnot(None),
+            Game.room != ''
+        ).distinct().order_by(Game.room).all()
+
+        # 튜플을 문자열 리스트로 변환
+        room_list = [room[0] for room in rooms]
+
+        return jsonify({
+            'success': True,
+            'data': {
+                'rooms': room_list,
+                'count': len(room_list)
+            }
+        }), 200
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @bp.route('/<game_id>', methods=['GET'])
 def get_game(game_id):
     """

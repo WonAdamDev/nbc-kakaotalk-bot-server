@@ -151,6 +151,85 @@ def list_games():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@bp.route('/all', methods=['GET'])
+def get_all_games():
+    """
+    모든 경기 목록 조회 (페이지네이션)
+    Query Parameters:
+        - page: 페이지 번호 (기본값: 1)
+        - limit: 페이지당 항목 수 (기본값: 10, 최대: 100)
+        - room: 특정 방의 경기만 필터링 (선택사항)
+    """
+    try:
+        # 쿼리 파라미터 파싱
+        page = request.args.get('page', 1, type=int)
+        limit = request.args.get('limit', 10, type=int)
+        room = request.args.get('room', None)
+
+        # 유효성 검사
+        if page < 1:
+            page = 1
+        if limit < 1:
+            limit = 10
+        if limit > 100:
+            limit = 100
+
+        # 기본 쿼리
+        query = Game.query
+
+        # room 필터링 (선택사항)
+        if room:
+            query = query.filter(Game.room == room)
+
+        # 최신순 정렬
+        query = query.order_by(Game.created_at.desc())
+
+        # 페이지네이션
+        pagination = query.paginate(
+            page=page,
+            per_page=limit,
+            error_out=False
+        )
+
+        # 프론트엔드 URL
+        frontend_url = get_frontend_url()
+
+        # 경기 데이터 변환
+        games_data = []
+        for game in pagination.items:
+            games_data.append({
+                'game_id': game.game_id,
+                'url': f"{frontend_url}/game/{game.game_id}",
+                'room': game.room,
+                'creator': game.creator,
+                'date': game.date.isoformat() if game.date else None,
+                'created_at': game.created_at.isoformat() if game.created_at else None,
+                'status': game.status,
+                'current_quarter': game.current_quarter,
+                'winner': game.winner,
+                'final_score_blue': game.final_score_blue,
+                'final_score_white': game.final_score_white
+            })
+
+        return jsonify({
+            'success': True,
+            'data': {
+                'games': games_data,
+                'pagination': {
+                    'page': pagination.page,
+                    'limit': limit,
+                    'total_items': pagination.total,
+                    'total_pages': pagination.pages,
+                    'has_next': pagination.has_next,
+                    'has_prev': pagination.has_prev
+                }
+            }
+        }), 200
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @bp.route('/<game_id>', methods=['GET'])
 def get_game(game_id):
     """

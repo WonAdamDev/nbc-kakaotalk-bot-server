@@ -102,55 +102,6 @@ def create_game():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-@bp.route('/list', methods=['GET'])
-def list_games():
-    """
-    방별 경기 목록 조회
-    Query: ?room=카카오톡방이름
-    """
-    room = request.args.get('room')
-
-    if not room:
-        return jsonify({'success': False, 'error': 'room parameter is required'}), 400
-
-    try:
-        # 해당 방의 경기 목록 조회 (최신순, 최근 7일)
-        from datetime import timedelta
-        seven_days_ago = date.today() - timedelta(days=7)
-
-        games = Game.query.filter(
-            Game.room == room,
-            Game.date >= seven_days_ago
-        ).order_by(Game.created_at.desc()).all()
-
-        # 프론트엔드 URL
-        frontend_url = get_frontend_url()
-
-        games_data = []
-        for game in games:
-            games_data.append({
-                'game_id': game.game_id,
-                'url': f"{frontend_url}/game/{game.game_id}",
-                'creator': game.creator,
-                'date': game.date.isoformat() if game.date else None,
-                'created_at': game.created_at.isoformat() if game.created_at else None,
-                'status': game.status,
-                'current_quarter': game.current_quarter
-            })
-
-        return jsonify({
-            'success': True,
-            'data': {
-                'room': room,
-                'count': len(games_data),
-                'games': games_data
-            }
-        }), 200
-
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-
 @bp.route('/all', methods=['GET'])
 def get_all_games():
     """
@@ -159,12 +110,14 @@ def get_all_games():
         - page: 페이지 번호 (기본값: 1)
         - limit: 페이지당 항목 수 (기본값: 10, 최대: 100)
         - room: 특정 방의 경기만 필터링 (선택사항)
+        - days: 최근 N일 이내 경기만 필터링 (선택사항, 예: 7)
     """
     try:
         # 쿼리 파라미터 파싱
         page = request.args.get('page', 1, type=int)
         limit = request.args.get('limit', 10, type=int)
         room = request.args.get('room', None)
+        days = request.args.get('days', None, type=int)
 
         # 유효성 검사
         if page < 1:
@@ -180,6 +133,12 @@ def get_all_games():
         # room 필터링 (선택사항)
         if room:
             query = query.filter(Game.room == room)
+
+        # days 필터링 (선택사항)
+        if days and days > 0:
+            from datetime import timedelta
+            cutoff_date = date.today() - timedelta(days=days)
+            query = query.filter(Game.date >= cutoff_date)
 
         # 최신순 정렬
         query = query.order_by(Game.created_at.desc())

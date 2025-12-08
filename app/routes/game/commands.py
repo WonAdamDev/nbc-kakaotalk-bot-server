@@ -515,19 +515,19 @@ def start_quarter(game_id):
 
         if prev_quarter and quarter_number > 1:
             # 로테이션 로직: 이전 쿼터 벤치 선수들이 먼저 출전
-            # 벤치 순서의 역순으로 코트에 투입
+            # 벤치 순서 그대로 코트에 투입 (정순)
             prev_bench_blue = prev_quarter.bench_blue or []
             prev_playing_blue = prev_quarter.playing_blue or []
 
-            # 벤치의 역순 + 이전 출전 선수
-            rotation_blue = list(reversed(prev_bench_blue)) + prev_playing_blue
+            # 벤치 정순 + 이전 출전 선수
+            rotation_blue = prev_bench_blue + prev_playing_blue
             playing_blue = rotation_blue[:5]
             bench_blue = rotation_blue[5:]
 
             prev_bench_white = prev_quarter.bench_white or []
             prev_playing_white = prev_quarter.playing_white or []
 
-            rotation_white = list(reversed(prev_bench_white)) + prev_playing_white
+            rotation_white = prev_bench_white + prev_playing_white
             playing_white = rotation_white[:5]
             bench_white = rotation_white[5:]
         else:

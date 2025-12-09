@@ -88,6 +88,7 @@ class Quarter(db.Model):
     playing_white = db.Column(db.JSON)
     bench_blue = db.Column(db.JSON)  # [6, 7]
     bench_white = db.Column(db.JSON)
+    lineup_snapshot = db.Column(db.JSON)  # {'블루': {1: '홍길동', 2: '김철수'}, '화이트': {...}}
     score_blue = db.Column(db.Integer, default=0)
     score_white = db.Column(db.Integer, default=0)
     started_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -111,6 +112,7 @@ class Quarter(db.Model):
                 'blue': self.bench_blue or [],
                 'white': self.bench_white or []
             },
+            'lineup_snapshot': self.lineup_snapshot or {},
             'score': {
                 'blue': self.score_blue,
                 'white': self.score_white

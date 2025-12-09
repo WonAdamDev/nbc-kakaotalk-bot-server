@@ -742,6 +742,24 @@ def start_quarter(game_id):
 
             playing_blue, bench_blue, playing_white, bench_white, _ = result
 
+        # 현재 라인업 스냅샷 생성 (순번-이름 매핑)
+        blue_lineups = Lineup.query.filter_by(
+            game_id=game_id,
+            team='블루',
+            arrived=True
+        ).all()
+
+        white_lineups = Lineup.query.filter_by(
+            game_id=game_id,
+            team='화이트',
+            arrived=True
+        ).all()
+
+        lineup_snapshot = {
+            '블루': {lineup.number: lineup.member for lineup in blue_lineups},
+            '화이트': {lineup.number: lineup.member for lineup in white_lineups}
+        }
+
         # 쿼터 생성
         quarter = Quarter(
             game_id=game_id,
@@ -751,6 +769,7 @@ def start_quarter(game_id):
             playing_white=playing_white,
             bench_blue=bench_blue,
             bench_white=bench_white,
+            lineup_snapshot=lineup_snapshot,
             score_blue=0,
             score_white=0,
             started_at=datetime.utcnow()

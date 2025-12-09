@@ -535,11 +535,11 @@ def swap_lineup_numbers(game_id):
     if not game:
         return jsonify({'success': False, 'error': 'Game not found'}), 404
 
-    # 경기가 준비중일 때만 순번 변경 가능
-    if game.status != '준비중':
-        return jsonify({'success': False, 'error': 'Cannot swap lineup during game'}), 400
+    # 경기가 종료되었으면 순번 변경 불가
+    if game.status == '종료':
+        return jsonify({'success': False, 'error': 'Cannot swap lineup after game ended'}), 400
 
-    # 진행중인 쿼터가 있는지 확인
+    # 진행중인 쿼터가 있으면 순번 변경 불가
     ongoing_quarter = Quarter.query.filter_by(
         game_id=game_id,
         status='진행중'

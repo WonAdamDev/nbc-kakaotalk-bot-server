@@ -582,9 +582,18 @@ def swap_lineup_numbers(game_id):
         if not player_to:
             return jsonify({'success': False, 'error': f'Player with number {to_number} not found'}), 404
 
-        # 순번 교체 (swap)
-        player_from.number = to_number
+        # 순번 교체 (unique constraint 회피를 위해 3단계로 처리)
+        # 1. player_from을 임시 번호(-1)로 변경
+        temp_number = -1
+        player_from.number = temp_number
+        db.session.flush()
+
+        # 2. player_to를 from_number로 변경
         player_to.number = from_number
+        db.session.flush()
+
+        # 3. player_from을 to_number로 변경
+        player_from.number = to_number
 
         db.session.commit()
 

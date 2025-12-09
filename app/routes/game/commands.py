@@ -520,6 +520,98 @@ def remove_player(game_id, lineup_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@bp.route('/<game_id>/lineup/swap', methods=['PUT'])
+def swap_lineup_numbers(game_id):
+    """
+    순번 교체 (드래그앤드롭)
+    Body: {
+        "team": "블루" or "화이트",
+        "from_number": 5,
+        "to_number": 3
+    }
+    """
+    game = Game.query.filter_by(game_id=game_id).first()
+
+    if not game:
+        return jsonify({'success': False, 'error': 'Game not found'}), 404
+
+    # 경기가 준비중일 때만 순번 변경 가능
+    if game.status != '준비중':
+        return jsonify({'success': False, 'error': 'Cannot swap lineup during game'}), 400
+
+    # 진행중인 쿼터가 있는지 확인
+    ongoing_quarter = Quarter.query.filter_by(
+        game_id=game_id,
+        status='진행중'
+    ).first()
+
+    if ongoing_quarter:
+        return jsonify({'success': False, 'error': 'Cannot swap lineup while quarter is ongoing'}), 400
+
+    data = request.get_json()
+    team = data.get('team')
+    from_number = data.get('from_number')
+    to_number = data.get('to_number')
+
+    if team not in ['블루', '화이트']:
+        return jsonify({'success': False, 'error': 'team must be "블루" or "화이트"'}), 400
+
+    if not from_number or not to_number:
+        return jsonify({'success': False, 'error': 'from_number and to_number are required'}), 400
+
+    if from_number == to_number:
+        return jsonify({'success': False, 'error': 'from_number and to_number must be different'}), 400
+
+    try:
+        # 두 선수 찾기
+        player_from = Lineup.query.filter_by(
+            game_id=game_id,
+            team=team,
+            number=from_number
+        ).first()
+
+        player_to = Lineup.query.filter_by(
+            game_id=game_id,
+            team=team,
+            number=to_number
+        ).first()
+
+        if not player_from:
+            return jsonify({'success': False, 'error': f'Player with number {from_number} not found'}), 404
+
+        if not player_to:
+            return jsonify({'success': False, 'error': f'Player with number {to_number} not found'}), 404
+
+        # 순번 교체 (swap)
+        player_from.number = to_number
+        player_to.number = from_number
+
+        db.session.commit()
+
+        # WebSocket 브로드캐스트
+        emit_game_update(game_id, 'lineup_swapped', {
+            'team': team,
+            'from_number': from_number,
+            'to_number': to_number
+        })
+
+        return jsonify({
+            'success': True,
+            'message': 'Lineup swapped successfully',
+            'data': {
+                'team': team,
+                'swapped': [
+                    {'member': player_from.member, 'old_number': from_number, 'new_number': to_number},
+                    {'member': player_to.member, 'old_number': to_number, 'new_number': from_number}
+                ]
+            }
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @bp.route('/<game_id>/quarter/preview', methods=['GET'])
 def preview_quarter(game_id):
     """

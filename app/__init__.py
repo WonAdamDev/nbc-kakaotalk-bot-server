@@ -29,8 +29,14 @@ def create_app(config_class=Config):
 
     # 2. 프로덕션 프론트엔드 URL 추가
     frontend_url = app.config.get('FRONTEND_URL')
-    if frontend_url and frontend_url not in cors_origins:
-        cors_origins.append(frontend_url)
+    if frontend_url:
+        # http:// 또는 https:// 없으면 둘 다 추가
+        if not frontend_url.startswith('http://') and not frontend_url.startswith('https://'):
+            cors_origins.append(f'https://{frontend_url}')
+            cors_origins.append(f'http://{frontend_url}')
+        else:
+            if frontend_url not in cors_origins:
+                cors_origins.append(frontend_url)
 
     print(f"[CORS] Allowed origins: {cors_origins}")
 
@@ -170,9 +176,30 @@ def create_app(config_class=Config):
             'postgresql': pg_status,
         }, 200
 
-    # PostgreSQL 테이블 생성
+    # PostgreSQL 테이블 생성 및 마이그레이션
     with app.app_context():
         db.create_all()
         print("[OK] PostgreSQL tables created")
+
+        # lineup_snapshot 컬럼 추가 (마이그레이션)
+        try:
+            from sqlalchemy import inspect, text
+            inspector = inspect(db.engine)
+
+            # quarters 테이블에 lineup_snapshot 컬럼이 있는지 확인
+            columns = [col['name'] for col in inspector.get_columns('quarters')]
+
+            if 'lineup_snapshot' not in columns:
+                print("[Migration] Adding lineup_snapshot column to quarters table...")
+                db.session.execute(text(
+                    "ALTER TABLE quarters ADD COLUMN lineup_snapshot JSON"
+                ))
+                db.session.commit()
+                print("[OK] lineup_snapshot column added")
+            else:
+                print("[OK] lineup_snapshot column already exists")
+        except Exception as e:
+            print(f"[WARNING] Migration check failed: {e}")
+            db.session.rollback()
 
     return app

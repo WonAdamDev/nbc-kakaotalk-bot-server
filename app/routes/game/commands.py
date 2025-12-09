@@ -504,10 +504,18 @@ def remove_player(game_id, lineup_id):
 
         db.session.commit()
 
+        # 업데이트된 팀 라인업 조회
+        updated_lineups = Lineup.query.filter_by(
+            game_id=game_id,
+            team=team,
+            arrived=True
+        ).order_by(Lineup.number).all()
+
         # WebSocket 브로드캐스트
         emit_game_update(game_id, 'player_removed', {
             'lineup_id': lineup_id,
-            'team': team
+            'team': team,
+            'lineups': [l.to_dict() for l in updated_lineups]
         })
 
         return jsonify({
@@ -597,11 +605,19 @@ def swap_lineup_numbers(game_id):
 
         db.session.commit()
 
+        # 업데이트된 팀 라인업 조회
+        updated_lineups = Lineup.query.filter_by(
+            game_id=game_id,
+            team=team,
+            arrived=True
+        ).order_by(Lineup.number).all()
+
         # WebSocket 브로드캐스트
         emit_game_update(game_id, 'lineup_swapped', {
             'team': team,
             'from_number': from_number,
-            'to_number': to_number
+            'to_number': to_number,
+            'lineups': [l.to_dict() for l in updated_lineups]
         })
 
         return jsonify({

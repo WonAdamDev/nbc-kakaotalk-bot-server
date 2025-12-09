@@ -625,6 +625,7 @@ def swap_lineup_numbers(game_id):
             'message': 'Lineup swapped successfully',
             'data': {
                 'team': team,
+                'lineups': [l.to_dict() for l in updated_lineups],
                 'swapped': [
                     {'member': player_from.member, 'old_number': from_number, 'new_number': to_number},
                     {'member': player_to.member, 'old_number': to_number, 'new_number': from_number}

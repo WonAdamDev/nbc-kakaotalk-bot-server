@@ -296,7 +296,7 @@ def end_game(game_id):
 
     try:
         # 마지막 쿼터의 누적 점수 (쿼터 번호 순으로 정렬 후 마지막)
-        quarters = Quarter.query.filter_by(game_id=game_id).order_by(Quarter.quarter.asc()).all()
+        quarters = Quarter.query.filter_by(game_id=game_id).order_by(Quarter.quarter_number.asc()).all()
 
         if not quarters:
             return jsonify({'success': False, 'error': 'No quarters found'}), 400

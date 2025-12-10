@@ -120,3 +120,27 @@ class Quarter(db.Model):
             'started_at': self.started_at.isoformat() if self.started_at else None,
             'ended_at': self.ended_at.isoformat() if self.ended_at else None
         }
+
+
+class RoomMember(db.Model):
+    """방 멤버 프리셋"""
+    __tablename__ = 'room_members'
+
+    id = db.Column(db.Integer, primary_key=True)
+    room = db.Column(db.String(100), nullable=False)
+    name = db.Column(db.String(50), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        db.UniqueConstraint('room', 'name', name='unique_room_member'),
+        db.Index('idx_room_member_room', 'room'),
+    )
+
+    def to_dict(self):
+        """딕셔너리 변환"""
+        return {
+            'id': self.id,
+            'room': self.room,
+            'name': self.name,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }

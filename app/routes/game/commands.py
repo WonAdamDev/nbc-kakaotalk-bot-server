@@ -3,7 +3,7 @@
 """
 from flask import Blueprint, request, jsonify, current_app
 from datetime import datetime, date
-from app.models import db, Game, Lineup, Quarter
+from app.models import db, Game, Lineup, Quarter, RoomMember
 from app import socketio
 import uuid
 
@@ -763,6 +763,103 @@ def update_score(game_id, quarter_number):
         return jsonify({
             'success': True,
             'data': quarter.to_dict()
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ========================================
+# Room Member API (멤버 프리셋)
+# ========================================
+
+@bp.route('/<game_id>/room/members', methods=['GET'])
+def get_room_members(game_id):
+    """
+    해당 경기의 방 멤버 프리셋 조회
+    """
+    game = Game.query.filter_by(game_id=game_id).first()
+
+    if not game:
+        return jsonify({'success': False, 'error': 'Game not found'}), 404
+
+    try:
+        members = RoomMember.query.filter_by(room=game.room).order_by(RoomMember.name.asc()).all()
+        return jsonify({
+            'success': True,
+            'data': {
+                'room': game.room,
+                'members': [m.to_dict() for m in members]
+            }
+        }), 200
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@bp.route('/<game_id>/room/members', methods=['POST'])
+def add_room_member(game_id):
+    """
+    방 멤버 추가
+    Body: {
+        "name": "멤버 이름"
+    }
+    """
+    game = Game.query.filter_by(game_id=game_id).first()
+
+    if not game:
+        return jsonify({'success': False, 'error': 'Game not found'}), 404
+
+    data = request.get_json()
+    name = data.get('name', '').strip()
+
+    if not name:
+        return jsonify({'success': False, 'error': 'name is required'}), 400
+
+    try:
+        # 이미 존재하는지 확인
+        existing = RoomMember.query.filter_by(room=game.room, name=name).first()
+        if existing:
+            return jsonify({'success': False, 'error': 'Member already exists'}), 400
+
+        # 멤버 추가
+        member = RoomMember(room=game.room, name=name)
+        db.session.add(member)
+        db.session.commit()
+
+        return jsonify({
+            'success': True,
+            'data': member.to_dict()
+        }), 201
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@bp.route('/<game_id>/room/members/<int:member_id>', methods=['DELETE'])
+def delete_room_member(game_id, member_id):
+    """
+    방 멤버 삭제
+    """
+    game = Game.query.filter_by(game_id=game_id).first()
+
+    if not game:
+        return jsonify({'success': False, 'error': 'Game not found'}), 404
+
+    try:
+        member = RoomMember.query.filter_by(id=member_id, room=game.room).first()
+
+        if not member:
+            return jsonify({'success': False, 'error': 'Member not found'}), 404
+
+        db.session.delete(member)
+        db.session.commit()
+
+        return jsonify({
+            'success': True,
+            'message': 'Member deleted successfully'
         }), 200
 
     except Exception as e:

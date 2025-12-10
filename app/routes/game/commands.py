@@ -425,8 +425,26 @@ def player_arrival(game_id):
 @bp.route('/<game_id>/lineup/<int:lineup_id>', methods=['DELETE'])
 def remove_player(game_id, lineup_id):
     """
-    선수 제거
+    선수 제거 (조퇴)
     """
+    game = Game.query.filter_by(game_id=game_id).first()
+
+    if not game:
+        return jsonify({'success': False, 'error': 'Game not found'}), 404
+
+    # 경기가 종료되었으면 제거 불가
+    if game.status == '종료':
+        return jsonify({'success': False, 'error': 'Cannot remove player after game ended'}), 400
+
+    # 진행중인 쿼터가 있으면 제거 불가
+    ongoing_quarter = Quarter.query.filter_by(
+        game_id=game_id,
+        status='진행중'
+    ).first()
+
+    if ongoing_quarter:
+        return jsonify({'success': False, 'error': 'Cannot remove player while quarter is ongoing'}), 400
+
     lineup = Lineup.query.filter_by(id=lineup_id, game_id=game_id).first()
 
     if not lineup:
@@ -435,6 +453,7 @@ def remove_player(game_id, lineup_id):
     try:
         team = lineup.team
         number = lineup.number
+        member_name = lineup.member
 
         db.session.delete(lineup)
 

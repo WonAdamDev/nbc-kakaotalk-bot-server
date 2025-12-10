@@ -644,9 +644,10 @@ def start_quarter(game_id):
             arrived=True
         ).all()
 
+        # 라인업 스냅샷 생성 (JSON 호환을 위해 키를 문자열로 저장)
         lineup_snapshot = {
-            '블루': {lineup.number: lineup.member for lineup in blue_lineups},
-            '화이트': {lineup.number: lineup.member for lineup in white_lineups}
+            '블루': {str(lineup.number): lineup.member for lineup in blue_lineups},
+            '화이트': {str(lineup.number): lineup.member for lineup in white_lineups}
         }
 
         # 쿼터 생성

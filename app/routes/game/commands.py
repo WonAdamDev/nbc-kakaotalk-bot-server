@@ -295,10 +295,15 @@ def end_game(game_id):
         return jsonify({'success': False, 'error': 'Game already ended'}), 400
 
     try:
-        # 모든 쿼터의 점수 합산
-        quarters = Quarter.query.filter_by(game_id=game_id).all()
-        total_blue = sum(q.score_blue for q in quarters)
-        total_white = sum(q.score_white for q in quarters)
+        # 마지막 쿼터의 누적 점수 (쿼터 번호 순으로 정렬 후 마지막)
+        quarters = Quarter.query.filter_by(game_id=game_id).order_by(Quarter.quarter.asc()).all()
+
+        if not quarters:
+            return jsonify({'success': False, 'error': 'No quarters found'}), 400
+
+        last_quarter = quarters[-1]
+        total_blue = last_quarter.score_blue
+        total_white = last_quarter.score_white
 
         # 승자 결정
         if total_blue > total_white:

@@ -477,9 +477,17 @@ def remove_player(game_id, lineup_id):
 @bp.route('/<game_id>/lineup/swap', methods=['PUT'])
 def swap_lineup_numbers(game_id):
     """
-    순번 교체 (드래그앤드롭)
+    순번 교체 (드래그앤드롭) - 같은 팀 또는 다른 팀 간 교체 지원
     Body: {
-        "team": "블루" or "화이트",
+        "from_team": "블루",
+        "from_number": 5,
+        "to_team": "화이트",
+        "to_number": 3
+    }
+
+    또는 기존 호환성을 위한 형식:
+    Body: {
+        "team": "블루",
         "from_number": 5,
         "to_number": 3
     }
@@ -503,79 +511,96 @@ def swap_lineup_numbers(game_id):
         return jsonify({'success': False, 'error': 'Cannot swap lineup while quarter is ongoing'}), 400
 
     data = request.get_json()
-    team = data.get('team')
+
+    # 새 형식 (다른 팀 간 교체 지원)
+    from_team = data.get('from_team')
     from_number = data.get('from_number')
+    to_team = data.get('to_team')
     to_number = data.get('to_number')
 
-    if team not in ['블루', '화이트']:
-        return jsonify({'success': False, 'error': 'team must be "블루" or "화이트"'}), 400
+    # 기존 형식 호환 (같은 팀 내 교체)
+    if not from_team or not to_team:
+        team = data.get('team')
+        if team:
+            from_team = team
+            to_team = team
+
+    if from_team not in ['블루', '화이트'] or to_team not in ['블루', '화이트']:
+        return jsonify({'success': False, 'error': 'teams must be "블루" or "화이트"'}), 400
 
     if not from_number or not to_number:
         return jsonify({'success': False, 'error': 'from_number and to_number are required'}), 400
 
-    if from_number == to_number:
-        return jsonify({'success': False, 'error': 'from_number and to_number must be different'}), 400
+    if from_team == to_team and from_number == to_number:
+        return jsonify({'success': False, 'error': 'Cannot swap player with itself'}), 400
 
     try:
         # 두 선수 찾기
         player_from = Lineup.query.filter_by(
             game_id=game_id,
-            team=team,
+            team=from_team,
             number=from_number
         ).first()
 
         player_to = Lineup.query.filter_by(
             game_id=game_id,
-            team=team,
+            team=to_team,
             number=to_number
         ).first()
 
         if not player_from:
-            return jsonify({'success': False, 'error': f'Player with number {from_number} not found'}), 404
+            return jsonify({'success': False, 'error': f'Player {from_team} #{from_number} not found'}), 404
 
         if not player_to:
-            return jsonify({'success': False, 'error': f'Player with number {to_number} not found'}), 404
+            return jsonify({'success': False, 'error': f'Player {to_team} #{to_number} not found'}), 404
 
-        # 순번 교체 (unique constraint 회피를 위해 3단계로 처리)
-        # 1. player_from을 임시 번호(-1)로 변경
+        # 순번 및 팀 교체 (unique constraint 회피를 위해 임시 값 사용)
+        # 1. player_from을 임시 번호로 변경
         temp_number = -1
+        temp_team = player_from.team
         player_from.number = temp_number
         db.session.flush()
 
-        # 2. player_to를 from_number로 변경
+        # 2. player_to를 player_from의 원래 위치로 변경
+        player_to.team = from_team
         player_to.number = from_number
         db.session.flush()
 
-        # 3. player_from을 to_number로 변경
+        # 3. player_from을 player_to의 원래 위치로 변경
+        player_from.team = to_team
         player_from.number = to_number
 
         db.session.commit()
 
-        # 업데이트된 팀 라인업 조회
-        updated_lineups = Lineup.query.filter_by(
-            game_id=game_id,
-            team=team,
-            arrived=True
-        ).order_by(Lineup.number).all()
+        # 업데이트된 라인업 조회 (영향받은 팀들)
+        affected_teams = {from_team, to_team}
+        updated_lineups = {}
 
-        # WebSocket 브로드캐스트
-        emit_game_update(game_id, 'lineup_swapped', {
-            'team': team,
-            'from_number': from_number,
-            'to_number': to_number,
-            'lineups': [l.to_dict() for l in updated_lineups]
-        })
+        for team in affected_teams:
+            lineups = Lineup.query.filter_by(
+                game_id=game_id,
+                team=team,
+                arrived=True
+            ).order_by(Lineup.number).all()
+            updated_lineups[team] = [l.to_dict() for l in lineups]
+
+        # WebSocket 브로드캐스트 (영향받은 팀들)
+        for team in affected_teams:
+            emit_game_update(game_id, 'lineup_swapped', {
+                'team': team,
+                'lineups': updated_lineups[team]
+            })
 
         return jsonify({
             'success': True,
             'message': 'Lineup swapped successfully',
             'data': {
-                'team': team,
-                'lineups': [l.to_dict() for l in updated_lineups],
-                'swapped': [
-                    {'member': player_from.member, 'old_number': from_number, 'new_number': to_number},
-                    {'member': player_to.member, 'old_number': to_number, 'new_number': from_number}
-                ]
+                'affected_teams': list(affected_teams),
+                'lineups': updated_lineups,
+                'swapped': {
+                    'from': {'team': from_team, 'number': from_number, 'member': player_to.member},
+                    'to': {'team': to_team, 'number': to_number, 'member': player_from.member}
+                }
             }
         }), 200
 

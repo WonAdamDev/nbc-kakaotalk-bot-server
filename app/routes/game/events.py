@@ -24,14 +24,18 @@ def handle_join_game(data):
     경기 방에 참여
     data: {"game_id": "ABC12345"}
     """
+    from flask_socketio import request as socketio_request
+
     game_id = data.get('game_id')
     if game_id:
         join_room(game_id)
-        print(f'[WebSocket] Client joined game room: {game_id}')
+        sid = socketio_request.sid
+        print(f'[WebSocket] Client {sid} joined game room: {game_id}')
         emit('joined_game', {
             'game_id': game_id,
             'message': f'Joined game {game_id}'
         }, room=game_id)
+        print(f'[WebSocket] Sent joined_game confirmation to room {game_id}')
 
 
 @socketio.on('leave_game')

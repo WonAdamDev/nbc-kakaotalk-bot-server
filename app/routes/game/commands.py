@@ -17,11 +17,13 @@ def generate_game_id():
 
 def emit_game_update(game_id, event_type, data):
     """WebSocket으로 게임 업데이트 브로드캐스트"""
+    print(f'[WebSocket] Broadcasting to room {game_id}: {event_type}')
     socketio.emit('game_update', {
         'game_id': game_id,
         'type': event_type,
         'data': data
-    }, room=game_id)
+    }, to=game_id, broadcast=True)
+    print(f'[WebSocket] Broadcast sent to room {game_id}')
 
 
 def calculate_rotation(game_id, quarter_number):

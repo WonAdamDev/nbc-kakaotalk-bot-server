@@ -649,6 +649,9 @@ def start_quarter(game_id):
             '블루': {str(lineup.number): lineup.member for lineup in blue_lineups},
             '화이트': {str(lineup.number): lineup.member for lineup in white_lineups}
         }
+        print(f'[Quarter Start] Snapshot created for Q{quarter_number}:')
+        print(f'  블루: {lineup_snapshot["블루"]}')
+        print(f'  화이트: {lineup_snapshot["화이트"]}')
 
         # 쿼터 생성
         quarter = Quarter(

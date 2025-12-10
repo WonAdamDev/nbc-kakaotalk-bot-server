@@ -52,9 +52,10 @@ def create_app(config_class=Config):
 
     # WebSocket 초기화 (CORS 설정 포함)
     # REST API와 동일한 도메인만 허용
+    # async_mode='eventlet': 프로덕션에서 eventlet worker 사용
     socketio.init_app(app,
         cors_allowed_origins=cors_origins,
-        async_mode='threading'
+        async_mode='eventlet'
     )
 
     # Redis 초기화

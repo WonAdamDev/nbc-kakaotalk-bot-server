@@ -1,10 +1,18 @@
 from flask import Blueprint, request, jsonify
 from app import cache_manager
+import re
 
 bp = Blueprint('member_commands', __name__, url_prefix='/api/commands/member')
 
 def make_member_key(room, member):
     return f"room:{room}:member:{member}"
+
+def extract_room_and_member_from_key(key):
+    """키에서 room과 member 추출: room:{room}:member:{member}"""
+    match = re.match(r'room:(.+?):member:(.+)', key)
+    if match:
+        return match.group(1), match.group(2)
+    return None, None
 
 @bp.route('/', methods=['GET'])
 def member_get_command():
@@ -101,6 +109,75 @@ def member_delete_command():
             'success': True,
             'data': {
                 'member': request_member
+            }
+        }), 200
+
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'오류가 발생했습니다: {str(e)}'
+        }), 500
+
+
+@bp.route('/list', methods=['GET'])
+def member_list_command():
+    """
+    특정 방의 모든 멤버 조회
+    Query params: room=방이름
+    """
+    if not cache_manager:
+        return jsonify({
+            'success': False,
+            'message': '캐시 시스템을 사용할 수 없습니다.'
+        }), 500
+
+    query_room = request.args.get('room')
+    if not query_room:
+        return jsonify({
+            'success': False,
+            'message': 'room parameter is required'
+        }), 400
+
+    try:
+        members = []
+
+        # MongoDB에서 해당 방의 모든 멤버 조회
+        if cache_manager.mongo_db is not None:
+            try:
+                # members 컬렉션에서 해당 방의 멤버 찾기
+                # 키 패턴: room:{room}:member:{member}
+                pattern_prefix = f"room:{query_room}:member:"
+
+                mongo_collection = cache_manager.mongo_db['members']
+                documents = mongo_collection.find({
+                    "_id": {"$regex": f"^{re.escape(pattern_prefix)}"}
+                })
+
+                for doc in documents:
+                    key = doc.get("_id")
+                    if key:
+                        room, member_name = extract_room_and_member_from_key(key)
+                        if room == query_room and member_name:
+                            members.append({
+                                'name': member_name,
+                                'room': room
+                            })
+
+                print(f"[MEMBER LIST] Found {len(members)} members in room '{query_room}'")
+
+            except Exception as e:
+                print(f"[MEMBER LIST] MongoDB error: {e}")
+
+        # 중복 제거 및 정렬
+        unique_members = {m['name']: m for m in members}.values()
+        sorted_members = sorted(unique_members, key=lambda x: x['name'])
+
+        return jsonify({
+            'success': True,
+            'data': {
+                'room': query_room,
+                'members': sorted_members,
+                'count': len(sorted_members)
             }
         }), 200
 

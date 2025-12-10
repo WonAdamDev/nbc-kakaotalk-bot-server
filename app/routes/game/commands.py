@@ -22,7 +22,7 @@ def emit_game_update(game_id, event_type, data):
         'game_id': game_id,
         'type': event_type,
         'data': data
-    }, to=game_id, broadcast=True)
+    }, to=game_id)
     print(f'[WebSocket] Broadcast sent to room {game_id}')
 
 

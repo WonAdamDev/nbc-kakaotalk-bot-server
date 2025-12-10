@@ -26,67 +26,6 @@ def emit_game_update(game_id, event_type, data):
     print(f'[WebSocket] Broadcast sent to room {game_id}')
 
 
-def calculate_rotation(game_id, quarter_number):
-    """
-    쿼터 로테이션 계산 (공통 로직)
-    Returns: (playing_blue, bench_blue, playing_white, bench_white, lineups_dict) or (None, error_message)
-    """
-    # 라인업 가져오기
-    blue_lineups = Lineup.query.filter_by(
-        game_id=game_id,
-        team='블루',
-        arrived=True
-    ).order_by(Lineup.number).all()
-
-    white_lineups = Lineup.query.filter_by(
-        game_id=game_id,
-        team='화이트',
-        arrived=True
-    ).order_by(Lineup.number).all()
-
-    if len(blue_lineups) < 5 or len(white_lineups) < 5:
-        return None, 'Each team needs at least 5 players'
-
-    # 이전 쿼터 정보 (로테이션 로직용)
-    prev_quarter = Quarter.query.filter_by(
-        game_id=game_id,
-        quarter_number=quarter_number - 1
-    ).first()
-
-    if prev_quarter and quarter_number > 1:
-        # 로테이션 로직: 이전 쿼터 벤치 선수들이 먼저 출전
-        # 벤치 순서 그대로 코트에 투입 (정순)
-        prev_bench_blue = prev_quarter.bench_blue or []
-        prev_playing_blue = prev_quarter.playing_blue or []
-
-        # 벤치 정순 + 이전 출전 선수
-        rotation_blue = prev_bench_blue + prev_playing_blue
-        playing_blue = rotation_blue[:5]
-        bench_blue = rotation_blue[5:]
-
-        prev_bench_white = prev_quarter.bench_white or []
-        prev_playing_white = prev_quarter.playing_white or []
-
-        rotation_white = prev_bench_white + prev_playing_white
-        playing_white = rotation_white[:5]
-        bench_white = rotation_white[5:]
-    else:
-        # 첫 쿼터: 순번대로 1-5번 출전, 나머지 벤치
-        playing_blue = [l.number for l in blue_lineups[:5]]
-        bench_blue = [l.number for l in blue_lineups[5:]]
-
-        playing_white = [l.number for l in white_lineups[:5]]
-        bench_white = [l.number for l in white_lineups[5:]]
-
-    # 라인업 정보 딕셔너리 생성 (번호 -> 이름 매핑)
-    lineups_dict = {
-        '블루': {l.number: l.member for l in blue_lineups},
-        '화이트': {l.number: l.member for l in white_lineups}
-    }
-
-    return (playing_blue, bench_blue, playing_white, bench_white, lineups_dict), None
-
-
 def get_frontend_url():
     """프론트엔드 URL 가져오기 (https:// 자동 추가)"""
     frontend_url = current_app.config['FRONTEND_URL']
@@ -640,65 +579,15 @@ def swap_lineup_numbers(game_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-@bp.route('/<game_id>/quarter/preview', methods=['GET'])
-def preview_quarter(game_id):
-    """
-    쿼터 미리보기 - 자동 로테이션 결과만 계산해서 반환 (Quarter 생성하지 않음)
-    Query: ?quarter_number=2 (optional, 기본값: 현재 쿼터 + 1)
-    """
-    game = Game.query.filter_by(game_id=game_id).first()
-
-    if not game:
-        return jsonify({'success': False, 'error': 'Game not found'}), 404
-
-    if game.status != '진행중':
-        return jsonify({'success': False, 'error': 'Game must be started first'}), 400
-
-    quarter_number = request.args.get('quarter_number', game.current_quarter + 1, type=int)
-
-    # 이미 존재하는 쿼터인지 확인
-    existing_quarter = Quarter.query.filter_by(
-        game_id=game_id,
-        quarter_number=quarter_number
-    ).first()
-
-    if existing_quarter:
-        return jsonify({'success': False, 'error': f'Quarter {quarter_number} already exists'}), 400
-
-    try:
-        # 로테이션 계산
-        result, error = calculate_rotation(game_id, quarter_number)
-
-        if error:
-            return jsonify({'success': False, 'error': error}), 400
-
-        playing_blue, bench_blue, playing_white, bench_white, lineups_dict = result
-
-        return jsonify({
-            'success': True,
-            'data': {
-                'quarter_number': quarter_number,
-                'playing_blue': playing_blue,
-                'bench_blue': bench_blue,
-                'playing_white': playing_white,
-                'bench_white': bench_white,
-                'lineups': lineups_dict
-            }
-        }), 200
-
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-
 @bp.route('/<game_id>/quarter/start', methods=['POST'])
 def start_quarter(game_id):
     """
-    쿼터 시작
+    쿼터 시작 (수동 선택 필수)
     Body: {
         "quarter_number": 1 (optional, 기본값: 현재 쿼터 + 1),
-        "playing_blue": [1,2,3,4,5] (optional, 없으면 자동 로테이션),
+        "playing_blue": [1,2,3,4,5] (required),
         "bench_blue": [6,7,8] (optional),
-        "playing_white": [1,2,3,4,5] (optional),
+        "playing_white": [1,2,3,4,5] (required),
         "bench_white": [6,7,8] (optional)
     }
     """
@@ -723,27 +612,24 @@ def start_quarter(game_id):
         return jsonify({'success': False, 'error': f'Quarter {quarter_number} already exists'}), 400
 
     try:
-        # Body에 명단이 있으면 사용, 없으면 자동 로테이션
-        if 'playing_blue' in data and 'playing_white' in data:
-            playing_blue = data.get('playing_blue', [])
-            bench_blue = data.get('bench_blue', [])
-            playing_white = data.get('playing_white', [])
-            bench_white = data.get('bench_white', [])
+        # 수동 선택 필수
+        if 'playing_blue' not in data or 'playing_white' not in data:
+            return jsonify({
+                'success': False,
+                'error': 'playing_blue and playing_white are required'
+            }), 400
 
-            # 유효성 검사
-            if len(playing_blue) != 5 or len(playing_white) != 5:
-                return jsonify({
-                    'success': False,
-                    'error': 'Each team must have exactly 5 playing players'
-                }), 400
-        else:
-            # 자동 로테이션
-            result, error = calculate_rotation(game_id, quarter_number)
+        playing_blue = data.get('playing_blue', [])
+        bench_blue = data.get('bench_blue', [])
+        playing_white = data.get('playing_white', [])
+        bench_white = data.get('bench_white', [])
 
-            if error:
-                return jsonify({'success': False, 'error': error}), 400
-
-            playing_blue, bench_blue, playing_white, bench_white, _ = result
+        # 유효성 검사
+        if len(playing_blue) != 5 or len(playing_white) != 5:
+            return jsonify({
+                'success': False,
+                'error': 'Each team must have exactly 5 playing players'
+            }), 400
 
         # 현재 라인업 스냅샷 생성 (순번-이름 매핑)
         blue_lineups = Lineup.query.filter_by(

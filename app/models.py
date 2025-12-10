@@ -68,6 +68,7 @@ class Lineup(db.Model):
     def to_dict(self):
         """딕셔너리 변환"""
         return {
+            'id': self.id,
             'team': self.team,
             'member': self.member,
             'number': self.number,

@@ -622,6 +622,19 @@ def swap_lineup_numbers(game_id):
 
             # 같은 팀 내에서 이동하는 경우 번호 재정렬
             if from_team == to_team:
+                # 팀에 선수가 1명뿐이면 이동할 필요 없음
+                team_player_count = Lineup.query.filter_by(
+                    game_id=game_id,
+                    team=from_team,
+                    arrived=True
+                ).count()
+
+                if team_player_count == 1:
+                    return jsonify({
+                        'success': False,
+                        'error': 'Cannot move player within a team with only one player'
+                    }), 400
+
                 old_number = player_from.number
                 new_number = to_number
 
@@ -696,8 +709,16 @@ def swap_lineup_numbers(game_id):
                     l.number = old_number + i
                 db.session.flush()
 
-                # 최종 위치로 이동
-                player_from.number = to_number
+                # 새 팀의 현재 선수 수 확인 (이동하는 선수 제외)
+                new_team_count = Lineup.query.filter_by(
+                    game_id=game_id,
+                    team=to_team,
+                    arrived=True
+                ).count()
+
+                # 마지막 순번으로 배치 (연속적인 번호 보장)
+                final_number = new_team_count + 1
+                player_from.number = final_number
                 db.session.commit()
         else:
             # 순번 및 팀 교체 (unique constraint 회피를 위해 임시 값 사용)

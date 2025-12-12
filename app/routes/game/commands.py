@@ -728,6 +728,25 @@ def swap_lineup_numbers(game_id):
 
                 # 최종 위치로 이동
                 player_from.number = new_number
+                db.session.flush()
+
+                # 같은 팀 내에서도 번호를 1부터 재정렬 (빈 순번 방지)
+                team_lineups = Lineup.query.filter_by(
+                    game_id=game_id,
+                    team=from_team,
+                    arrived=True
+                ).order_by(Lineup.number).all()
+
+                # 1단계: 모두 임시 음수로 변경
+                for i, l in enumerate(team_lineups):
+                    l.number = -(i + 100)
+                db.session.flush()
+
+                # 2단계: 1부터 연속적으로 재정렬
+                for i, l in enumerate(team_lineups):
+                    l.number = i + 1
+                db.session.flush()
+
                 db.session.commit()
             else:
                 # 다른 팀으로 이동하는 경우

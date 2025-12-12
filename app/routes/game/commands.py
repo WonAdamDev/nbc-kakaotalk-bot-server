@@ -737,18 +737,24 @@ def swap_lineup_numbers(game_id):
                 'lineups': updated_lineups[team]
             })
 
-        return jsonify({
+        # 응답 데이터 구성
+        response_data = {
             'success': True,
             'message': 'Lineup swapped successfully',
             'data': {
                 'affected_teams': list(affected_teams),
-                'lineups': updated_lineups,
-                'swapped': {
-                    'from': {'team': from_team, 'number': from_number, 'member': player_to.member},
-                    'to': {'team': to_team, 'number': to_number, 'member': player_from.member}
-                }
+                'lineups': updated_lineups
             }
-        }), 200
+        }
+
+        # player_to가 있는 경우에만 swapped 정보 추가
+        if player_to:
+            response_data['data']['swapped'] = {
+                'from': {'team': from_team, 'number': from_number, 'member': player_to.member},
+                'to': {'team': to_team, 'number': to_number, 'member': player_from.member}
+            }
+
+        return jsonify(response_data), 200
 
     except Exception as e:
         db.session.rollback()

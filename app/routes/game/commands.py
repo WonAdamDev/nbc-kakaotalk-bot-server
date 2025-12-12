@@ -709,16 +709,23 @@ def swap_lineup_numbers(game_id):
                     l.number = old_number + i
                 db.session.flush()
 
-                # 새 팀의 현재 선수 수 확인 (이동하는 선수 제외)
-                new_team_count = Lineup.query.filter_by(
+                # 새 팀의 모든 선수를 1부터 재정렬
+                new_team_lineups = Lineup.query.filter_by(
                     game_id=game_id,
                     team=to_team,
                     arrived=True
-                ).count()
+                ).order_by(Lineup.number).all()
 
-                # 마지막 순번으로 배치 (연속적인 번호 보장)
-                final_number = new_team_count + 1
-                player_from.number = final_number
+                # 1단계: 모두 임시 음수로 변경 (기존 음수와 충돌 방지)
+                for i, l in enumerate(new_team_lineups):
+                    l.number = -(i + 100)
+                db.session.flush()
+
+                # 2단계: 1부터 연속적으로 재정렬
+                for i, l in enumerate(new_team_lineups):
+                    l.number = i + 1
+                db.session.flush()
+
                 db.session.commit()
         else:
             # 순번 및 팀 교체 (unique constraint 회피를 위해 임시 값 사용)

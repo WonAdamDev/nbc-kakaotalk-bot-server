@@ -620,10 +620,58 @@ def swap_lineup_numbers(game_id):
             if existing:
                 return jsonify({'success': False, 'error': f'Number {to_number} is already taken in {to_team}'}), 400
 
-            # 단순 이동
-            player_from.team = to_team
-            player_from.number = to_number
-            db.session.commit()
+            # 같은 팀 내에서 이동하는 경우 번호 재정렬
+            if from_team == to_team:
+                old_number = player_from.number
+                new_number = to_number
+
+                # 임시 번호로 변경 (unique constraint 회피)
+                player_from.number = -1
+                db.session.flush()
+
+                if old_number < new_number:
+                    # 뒤로 이동: old_number+1 ~ new_number 사이의 선수들을 -1
+                    middle_players = Lineup.query.filter(
+                        Lineup.game_id == game_id,
+                        Lineup.team == from_team,
+                        Lineup.number > old_number,
+                        Lineup.number <= new_number
+                    ).all()
+                    for p in middle_players:
+                        p.number -= 1
+                else:
+                    # 앞으로 이동: new_number ~ old_number-1 사이의 선수들을 +1
+                    middle_players = Lineup.query.filter(
+                        Lineup.game_id == game_id,
+                        Lineup.team == from_team,
+                        Lineup.number >= new_number,
+                        Lineup.number < old_number
+                    ).all()
+                    for p in middle_players:
+                        p.number += 1
+
+                # 최종 위치로 이동
+                player_from.number = new_number
+                db.session.commit()
+            else:
+                # 다른 팀으로 이동하는 경우 단순 이동
+                old_team = player_from.team
+                old_number = player_from.number
+
+                player_from.team = to_team
+                player_from.number = to_number
+                db.session.flush()
+
+                # 원래 팀에서 뒤의 번호들 재정렬
+                later_lineups = Lineup.query.filter(
+                    Lineup.game_id == game_id,
+                    Lineup.team == old_team,
+                    Lineup.number > old_number
+                ).all()
+                for l in later_lineups:
+                    l.number -= 1
+
+                db.session.commit()
         else:
             # 순번 및 팀 교체 (unique constraint 회피를 위해 임시 값 사용)
             # 1. player_from을 임시 번호로 변경

@@ -560,12 +560,18 @@ def toggle_playing_status(game_id, lineup_id):
         lineup.playing_status = 'bench' if lineup.playing_status == 'playing' else 'playing'
         db.session.commit()
 
-        # WebSocket 브로드캐스트
-        emit_game_update(game_id, 'status_toggled', {
-            'lineup_id': lineup_id,
-            'team': lineup.team,
-            'member': lineup.member,
-            'playing_status': lineup.playing_status
+        # 업데이트된 팀의 전체 라인업 조회
+        team = lineup.team
+        updated_lineups = Lineup.query.filter_by(
+            game_id=game_id,
+            team=team,
+            arrived=True
+        ).order_by(Lineup.number).all()
+
+        # WebSocket 브로드캐스트 (전체 라인업 업데이트)
+        emit_game_update(game_id, 'lineup_updated', {
+            'team': team,
+            'lineups': [l.to_dict() for l in updated_lineups]
         })
 
         return jsonify({

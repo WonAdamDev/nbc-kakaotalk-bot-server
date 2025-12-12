@@ -993,10 +993,64 @@ def end_quarter(game_id, quarter_number):
     try:
         quarter.status = '종료'
         quarter.ended_at = datetime.utcnow()
+
+        # 쿼터 종료 후 출전/벤치 상태 업데이트
+        # playing_blue, playing_white에 있던 선수들은 'playing'으로, 나머지는 'bench'로 업데이트
+        playing_numbers_blue = set(quarter.playing_blue or [])
+        playing_numbers_white = set(quarter.playing_white or [])
+
+        # 블루팀 업데이트
+        blue_lineups = Lineup.query.filter_by(
+            game_id=game_id,
+            team='블루',
+            arrived=True
+        ).all()
+
+        for lineup in blue_lineups:
+            if lineup.number in playing_numbers_blue:
+                lineup.playing_status = 'playing'
+            else:
+                lineup.playing_status = 'bench'
+
+        # 화이트팀 업데이트
+        white_lineups = Lineup.query.filter_by(
+            game_id=game_id,
+            team='화이트',
+            arrived=True
+        ).all()
+
+        for lineup in white_lineups:
+            if lineup.number in playing_numbers_white:
+                lineup.playing_status = 'playing'
+            else:
+                lineup.playing_status = 'bench'
+
         db.session.commit()
 
-        # WebSocket 브로드캐스트
+        # WebSocket 브로드캐스트 (쿼터 종료)
         emit_game_update(game_id, 'quarter_ended', quarter.to_dict())
+
+        # WebSocket 브로드캐스트 (라인업 업데이트)
+        updated_blue = Lineup.query.filter_by(
+            game_id=game_id,
+            team='블루',
+            arrived=True
+        ).order_by(Lineup.number).all()
+
+        updated_white = Lineup.query.filter_by(
+            game_id=game_id,
+            team='화이트',
+            arrived=True
+        ).order_by(Lineup.number).all()
+
+        emit_game_update(game_id, 'lineup_updated', {
+            'team': '블루',
+            'lineups': [l.to_dict() for l in updated_blue]
+        })
+        emit_game_update(game_id, 'lineup_updated', {
+            'team': '화이트',
+            'lineups': [l.to_dict() for l in updated_white]
+        })
 
         return jsonify({
             'success': True,

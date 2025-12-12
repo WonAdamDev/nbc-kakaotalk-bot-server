@@ -158,9 +158,12 @@ def member_list_command():
                     if key:
                         room, member_name = extract_room_and_member_from_key(key)
                         if room == query_room and member_name:
+                            # 멤버의 팀 정보도 조회
+                            team = cache_manager.get('member_teams', key)
                             members.append({
                                 'name': member_name,
-                                'room': room
+                                'room': room,
+                                'team': team  # 팀 정보 추가 (None일 수 있음)
                             })
 
                 print(f"[MEMBER LIST] Found {len(members)} members in room '{query_room}'")

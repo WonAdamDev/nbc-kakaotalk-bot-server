@@ -423,6 +423,19 @@ def player_arrival(game_id):
     if not member:
         return jsonify({'success': False, 'error': 'member is required'}), 400
 
+    # 중복 이름 체크 (경기 내 모든 팀에서)
+    existing_player = Lineup.query.filter_by(
+        game_id=game_id,
+        member=member,
+        arrived=True
+    ).first()
+
+    if existing_player:
+        return jsonify({
+            'success': False,
+            'error': f'{member}님은 이미 {existing_player.team} 팀에 출석했습니다.'
+        }), 400
+
     try:
         # 해당 팀의 다음 번호 계산
         last_lineup = Lineup.query.filter_by(

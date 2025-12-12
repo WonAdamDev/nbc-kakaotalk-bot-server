@@ -636,9 +636,17 @@ def swap_lineup_numbers(game_id):
                         Lineup.team == from_team,
                         Lineup.number > old_number,
                         Lineup.number <= new_number
-                    ).all()
-                    for p in middle_players:
-                        p.number -= 1
+                    ).order_by(Lineup.number).all()
+
+                    # 1단계: 모두 임시 음수로 변경
+                    for i, p in enumerate(middle_players):
+                        p.number = -(i + 2)  # -2부터 시작 (-1은 player_from이 사용중)
+                    db.session.flush()
+
+                    # 2단계: 정상 번호로 변경 (old_number부터 시작)
+                    for i, p in enumerate(middle_players):
+                        p.number = old_number + i
+                    db.session.flush()
                 else:
                     # 앞으로 이동: new_number ~ old_number-1 사이의 선수들을 +1
                     middle_players = Lineup.query.filter(
@@ -646,20 +654,29 @@ def swap_lineup_numbers(game_id):
                         Lineup.team == from_team,
                         Lineup.number >= new_number,
                         Lineup.number < old_number
-                    ).all()
-                    for p in middle_players:
-                        p.number += 1
+                    ).order_by(Lineup.number).all()
+
+                    # 1단계: 모두 임시 음수로 변경
+                    for i, p in enumerate(middle_players):
+                        p.number = -(i + 2)
+                    db.session.flush()
+
+                    # 2단계: 정상 번호로 변경 (new_number+1부터 시작)
+                    for i, p in enumerate(middle_players):
+                        p.number = new_number + i + 1
+                    db.session.flush()
 
                 # 최종 위치로 이동
                 player_from.number = new_number
                 db.session.commit()
             else:
-                # 다른 팀으로 이동하는 경우 단순 이동
+                # 다른 팀으로 이동하는 경우
                 old_team = player_from.team
                 old_number = player_from.number
 
+                # player_from을 임시로 이동
                 player_from.team = to_team
-                player_from.number = to_number
+                player_from.number = -1
                 db.session.flush()
 
                 # 원래 팀에서 뒤의 번호들 재정렬
@@ -667,10 +684,20 @@ def swap_lineup_numbers(game_id):
                     Lineup.game_id == game_id,
                     Lineup.team == old_team,
                     Lineup.number > old_number
-                ).all()
-                for l in later_lineups:
-                    l.number -= 1
+                ).order_by(Lineup.number).all()
 
+                # 1단계: 모두 임시 음수로 변경
+                for i, l in enumerate(later_lineups):
+                    l.number = -(i + 2)
+                db.session.flush()
+
+                # 2단계: 정상 번호로 변경 (old_number부터 시작)
+                for i, l in enumerate(later_lineups):
+                    l.number = old_number + i
+                db.session.flush()
+
+                # 최종 위치로 이동
+                player_from.number = to_number
                 db.session.commit()
         else:
             # 순번 및 팀 교체 (unique constraint 회피를 위해 임시 값 사용)

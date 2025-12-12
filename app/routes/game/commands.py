@@ -494,16 +494,24 @@ def remove_player(game_id, lineup_id):
         member_name = lineup.member
 
         db.session.delete(lineup)
+        db.session.flush()
 
-        # 뒤의 번호들 재정렬
+        # 뒤의 번호들 재정렬 (2단계 업데이트로 unique constraint 회피)
         later_lineups = Lineup.query.filter(
             Lineup.game_id == game_id,
             Lineup.team == team,
             Lineup.number > number
-        ).all()
+        ).order_by(Lineup.number).all()
 
-        for l in later_lineups:
-            l.number -= 1
+        # 1단계: 모두 임시 음수로 변경
+        for i, l in enumerate(later_lineups):
+            l.number = -(i + 1)
+        db.session.flush()
+
+        # 2단계: 정상 번호로 변경 (삭제된 번호부터 시작)
+        for i, l in enumerate(later_lineups):
+            l.number = number + i
+        db.session.flush()
 
         db.session.commit()
 

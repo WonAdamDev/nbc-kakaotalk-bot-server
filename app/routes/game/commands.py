@@ -121,6 +121,9 @@ def get_all_games():
         room = request.args.get('room', None)
         days = request.args.get('days', None, type=int)
 
+        # 디버깅 로그
+        print(f"[/api/game/all] Query params - page: {page}, limit: {limit}, room: {room}, days: {days}")
+
         # 유효성 검사
         if page < 1:
             page = 1

@@ -605,26 +605,40 @@ def swap_lineup_numbers(game_id):
         if not player_from:
             return jsonify({'success': False, 'error': f'Player {from_team} #{from_number} not found'}), 404
 
+        # player_to가 없으면 단순 이동 (빈 자리로 이동)
         if not player_to:
-            return jsonify({'success': False, 'error': f'Player {to_team} #{to_number} not found'}), 404
+            # 목적지 번호가 이미 사용중인지 확인
+            existing = Lineup.query.filter_by(
+                game_id=game_id,
+                team=to_team,
+                number=to_number
+            ).first()
 
-        # 순번 및 팀 교체 (unique constraint 회피를 위해 임시 값 사용)
-        # 1. player_from을 임시 번호로 변경
-        temp_number = -1
-        temp_team = player_from.team
-        player_from.number = temp_number
-        db.session.flush()
+            if existing:
+                return jsonify({'success': False, 'error': f'Number {to_number} is already taken in {to_team}'}), 400
 
-        # 2. player_to를 player_from의 원래 위치로 변경
-        player_to.team = from_team
-        player_to.number = from_number
-        db.session.flush()
+            # 단순 이동
+            player_from.team = to_team
+            player_from.number = to_number
+            db.session.commit()
+        else:
+            # 순번 및 팀 교체 (unique constraint 회피를 위해 임시 값 사용)
+            # 1. player_from을 임시 번호로 변경
+            temp_number = -1
+            temp_team = player_from.team
+            player_from.number = temp_number
+            db.session.flush()
 
-        # 3. player_from을 player_to의 원래 위치로 변경
-        player_from.team = to_team
-        player_from.number = to_number
+            # 2. player_to를 player_from의 원래 위치로 변경
+            player_to.team = from_team
+            player_to.number = from_number
+            db.session.flush()
 
-        db.session.commit()
+            # 3. player_from을 player_to의 원래 위치로 변경
+            player_from.team = to_team
+            player_from.number = to_number
+
+            db.session.commit()
 
         # 업데이트된 라인업 조회 (영향받은 팀들)
         affected_teams = {from_team, to_team}

@@ -531,6 +531,53 @@ def remove_player(game_id, lineup_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@bp.route('/<game_id>/lineup/<int:lineup_id>/toggle-status', methods=['PUT'])
+def toggle_playing_status(game_id, lineup_id):
+    """
+    출전/벤치 상태 토글
+    """
+    game = Game.query.filter_by(game_id=game_id).first()
+
+    if not game:
+        return jsonify({'success': False, 'error': 'Game not found'}), 404
+
+    # 진행중인 쿼터가 있으면 토글 불가
+    ongoing_quarter = Quarter.query.filter_by(
+        game_id=game_id,
+        status='진행중'
+    ).first()
+
+    if ongoing_quarter:
+        return jsonify({'success': False, 'error': 'Cannot toggle status while quarter is ongoing'}), 400
+
+    lineup = Lineup.query.filter_by(id=lineup_id, game_id=game_id).first()
+
+    if not lineup:
+        return jsonify({'success': False, 'error': 'Lineup not found'}), 404
+
+    try:
+        # 상태 토글
+        lineup.playing_status = 'bench' if lineup.playing_status == 'playing' else 'playing'
+        db.session.commit()
+
+        # WebSocket 브로드캐스트
+        emit_game_update(game_id, 'status_toggled', {
+            'lineup_id': lineup_id,
+            'team': lineup.team,
+            'member': lineup.member,
+            'playing_status': lineup.playing_status
+        })
+
+        return jsonify({
+            'success': True,
+            'data': lineup.to_dict()
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @bp.route('/<game_id>/lineup/swap', methods=['PUT'])
 def swap_lineup_numbers(game_id):
     """

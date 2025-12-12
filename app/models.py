@@ -63,6 +63,7 @@ class Lineup(db.Model):
     number = db.Column(db.Integer, nullable=False)
     arrived = db.Column(db.Boolean, default=True)
     arrived_at = db.Column(db.DateTime, default=datetime.utcnow)
+    playing_status = db.Column(db.String(10), default='playing')  # playing, bench
 
     __table_args__ = (
         db.UniqueConstraint('game_id', 'team', 'number', name='unique_lineup'),
@@ -77,7 +78,8 @@ class Lineup(db.Model):
             'member': self.member,
             'number': self.number,
             'arrived': self.arrived,
-            'arrived_at': self.arrived_at.isoformat() if self.arrived_at else None
+            'arrived_at': self.arrived_at.isoformat() if self.arrived_at else None,
+            'playing_status': self.playing_status or 'playing'
         }
 
 

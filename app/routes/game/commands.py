@@ -725,14 +725,14 @@ def start_quarter(game_id):
         playing_white = data.get('playing_white', [])
         bench_white = data.get('bench_white', [])
 
-        # 유효성 검사
+        # 유효성 검사 - 선택된 선수가 정확히 5명인지
         if len(playing_blue) != 5 or len(playing_white) != 5:
             return jsonify({
                 'success': False,
                 'error': 'Each team must have exactly 5 playing players'
             }), 400
 
-        # 현재 라인업 스냅샷 생성 (순번-이름 매핑)
+        # 현재 라인업 조회
         blue_lineups = Lineup.query.filter_by(
             game_id=game_id,
             team='블루',
@@ -744,6 +744,19 @@ def start_quarter(game_id):
             team='화이트',
             arrived=True
         ).all()
+
+        # 유효성 검사 - 각 팀에 최소 5명 이상 있는지 확인
+        if len(blue_lineups) < 5:
+            return jsonify({
+                'success': False,
+                'error': f'HOME team must have at least 5 players. Currently: {len(blue_lineups)} players'
+            }), 400
+
+        if len(white_lineups) < 5:
+            return jsonify({
+                'success': False,
+                'error': f'AWAY team must have at least 5 players. Currently: {len(white_lineups)} players'
+            }), 400
 
         # 라인업 스냅샷 생성 (JSON 호환을 위해 키를 문자열로 저장)
         lineup_snapshot = {

@@ -254,6 +254,10 @@ def get_game(game_id):
 def start_game(game_id):
     """
     경기 시작
+    Body (optional): {
+        "team_home": "1팀",
+        "team_away": "2팀"
+    }
     """
     game = Game.query.filter_by(game_id=game_id).first()
 
@@ -263,9 +267,30 @@ def start_game(game_id):
     if game.status != '준비중':
         return jsonify({'success': False, 'error': f'Game is already {game.status}'}), 400
 
+    data = request.get_json() or {}
+    team_home = data.get('team_home')
+    team_away = data.get('team_away')
+
+    # 팀 선택 검증
+    if team_home and team_away:
+        # 두 팀이 같은지 확인
+        if team_home == team_away:
+            return jsonify({
+                'success': False,
+                'error': 'team_home and team_away must be different'
+            }), 400
+    elif team_home or team_away:
+        # 하나만 선택된 경우
+        return jsonify({
+            'success': False,
+            'error': 'Both team_home and team_away must be provided, or neither'
+        }), 400
+
     try:
         game.status = '진행중'
         game.started_at = datetime.utcnow()
+        game.team_home = team_home
+        game.team_away = team_away
         db.session.commit()
 
         # WebSocket 브로드캐스트

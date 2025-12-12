@@ -20,6 +20,8 @@ class Game(db.Model):
     ended_at = db.Column(db.DateTime)
     status = db.Column(db.String(20), default='준비중')  # 준비중, 진행중, 종료
     current_quarter = db.Column(db.Integer, default=0)
+    team_home = db.Column(db.String(50))  # 홈팀으로 경기하는 실제 팀 이름
+    team_away = db.Column(db.String(50))  # 어웨이팀으로 경기하는 실제 팀 이름
     final_score_blue = db.Column(db.Integer)
     final_score_white = db.Column(db.Integer)
     winner = db.Column(db.String(10))  # 블루, 화이트, 무승부
@@ -40,6 +42,8 @@ class Game(db.Model):
             'ended_at': self.ended_at.isoformat() if self.ended_at else None,
             'status': self.status,
             'current_quarter': self.current_quarter,
+            'team_home': self.team_home,
+            'team_away': self.team_away,
             'final_score': {
                 'blue': self.final_score_blue,
                 'white': self.final_score_white

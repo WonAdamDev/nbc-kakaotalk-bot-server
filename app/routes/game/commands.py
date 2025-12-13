@@ -922,43 +922,47 @@ def swap_lineup_numbers(game_id):
                 old_team = player_from.team
                 old_number = player_from.number
 
-                # player_from을 임시로 이동
+                # 1단계: player_from을 임시 위치로 이동
                 player_from.team = to_team
                 player_from.number = -1
                 db.session.flush()
 
-                # 원래 팀에서 뒤의 번호들 재정렬
+                # 2단계: 원래 팀에서 뒤의 번호들 -1 (빈 공간 메우기)
                 later_lineups = Lineup.query.filter(
                     Lineup.game_id == game_id,
                     Lineup.team == old_team,
-                    Lineup.number > old_number
+                    Lineup.number > old_number,
+                    Lineup.arrived == True
                 ).order_by(Lineup.number).all()
 
-                # 1단계: 모두 임시 음수로 변경
                 for i, l in enumerate(later_lineups):
                     l.number = -(i + 2)
                 db.session.flush()
 
-                # 2단계: 정상 번호로 변경 (old_number부터 시작)
                 for i, l in enumerate(later_lineups):
                     l.number = old_number + i
                 db.session.flush()
 
-                # 새 팀의 모든 선수를 1부터 재정렬
-                new_team_lineups = Lineup.query.filter_by(
-                    game_id=game_id,
-                    team=to_team,
-                    arrived=True
+                # 3단계: 새 팀에서 to_number 이상인 선수들을 임시 음수로 변경 후 +1
+                new_team_later_lineups = Lineup.query.filter(
+                    Lineup.game_id == game_id,
+                    Lineup.team == to_team,
+                    Lineup.number >= to_number,
+                    Lineup.arrived == True
                 ).order_by(Lineup.number).all()
 
-                # 1단계: 모두 임시 음수로 변경 (기존 음수와 충돌 방지)
-                for i, l in enumerate(new_team_lineups):
+                # 임시 음수로 변경
+                for i, l in enumerate(new_team_later_lineups):
                     l.number = -(i + 100)
                 db.session.flush()
 
-                # 2단계: 1부터 연속적으로 재정렬
-                for i, l in enumerate(new_team_lineups):
-                    l.number = i + 1
+                # +1 하여 공간 만들기
+                for i, l in enumerate(new_team_later_lineups):
+                    l.number = to_number + i + 1
+                db.session.flush()
+
+                # 4단계: player_from을 최종 위치로 이동
+                player_from.number = to_number
                 db.session.flush()
 
                 db.session.commit()

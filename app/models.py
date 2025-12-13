@@ -7,12 +7,30 @@ from flask_sqlalchemy import SQLAlchemy
 db = SQLAlchemy()
 
 
+class Room(db.Model):
+    """방 정보"""
+    __tablename__ = 'rooms'
+
+    room_id = db.Column(db.String(8), primary_key=True)
+    name = db.Column(db.String(100), unique=True, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        """딕셔너리 변환"""
+        return {
+            'room_id': self.room_id,
+            'name': self.name,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+
+
 class Game(db.Model):
     """경기 정보"""
     __tablename__ = 'games'
 
     game_id = db.Column(db.String(8), primary_key=True)
-    room = db.Column(db.String(100), nullable=False)
+    room_id = db.Column(db.String(8), db.ForeignKey('rooms.room_id', ondelete='CASCADE'), nullable=False)
+    room = db.Column(db.String(100), nullable=False)  # 호환성 유지용 (deprecated)
     creator = db.Column(db.String(50))
     date = db.Column(db.Date, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -34,6 +52,7 @@ class Game(db.Model):
         """딕셔너리 변환"""
         return {
             'game_id': self.game_id,
+            'room_id': self.room_id,
             'room': self.room,
             'creator': self.creator,
             'date': self.date.isoformat() if self.date else None,

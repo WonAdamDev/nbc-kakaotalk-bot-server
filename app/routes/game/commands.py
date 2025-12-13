@@ -1130,6 +1130,54 @@ def end_quarter(game_id, quarter_number):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@bp.route('/<game_id>/quarter/<int:quarter_number>/cancel', methods=['DELETE'])
+def cancel_quarter(game_id, quarter_number):
+    """
+    쿼터 취소 (진행중인 쿼터만 취소 가능)
+    """
+    game = Game.query.filter_by(game_id=game_id).first()
+
+    if not game:
+        return jsonify({'success': False, 'error': 'Game not found'}), 404
+
+    quarter = Quarter.query.filter_by(
+        game_id=game_id,
+        quarter_number=quarter_number
+    ).first()
+
+    if not quarter:
+        return jsonify({'success': False, 'error': 'Quarter not found'}), 404
+
+    # 진행중인 쿼터만 취소 가능
+    if quarter.status != '진행중':
+        return jsonify({'success': False, 'error': 'Only ongoing quarters can be cancelled'}), 400
+
+    try:
+        # 쿼터 삭제
+        db.session.delete(quarter)
+
+        # 현재 쿼터 번호 조정 (이전 쿼터로 되돌림)
+        if game.current_quarter == quarter_number:
+            game.current_quarter = quarter_number - 1
+
+        db.session.commit()
+
+        # WebSocket 브로드캐스트
+        emit_game_update(game_id, 'quarter_cancelled', {
+            'quarter_number': quarter_number,
+            'current_quarter': game.current_quarter
+        })
+
+        return jsonify({
+            'success': True,
+            'message': f'Quarter {quarter_number} cancelled successfully'
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @bp.route('/<game_id>/quarter/<int:quarter_number>/score', methods=['PUT'])
 def update_score(game_id, quarter_number):
     """

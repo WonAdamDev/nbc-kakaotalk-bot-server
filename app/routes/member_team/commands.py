@@ -388,14 +388,14 @@ def member_team_delete_command():
             # 멤버가 존재하는지 확인
             member = cache_manager.get('members', member_key)
             if not member:
-            return jsonify({
-                'success': False,
-                'data': {
-                    'member': request_member,
-                    'unassigned': False,
-                    'reason': 'member_not_found'
-                }
-            }), 404
+                return jsonify({
+                    'success': False,
+                    'data': {
+                        'member': request_member,
+                        'unassigned': False,
+                        'reason': 'member_not_found'
+                    }
+                }), 404
 
         # 팀 배정이 있는지 확인
         existing_team = cache_manager.get('member_teams', member_key)

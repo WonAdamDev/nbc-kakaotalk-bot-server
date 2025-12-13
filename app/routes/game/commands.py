@@ -1127,6 +1127,21 @@ def start_quarter(game_id):
         print(f'  블루: {len(lineup_snapshot["블루"])}명')
         print(f'  화이트: {len(lineup_snapshot["화이트"])}명')
 
+        # 이전 쿼터의 점수 가져오기
+        previous_quarter = Quarter.query.filter_by(
+            game_id=game_id,
+            quarter_number=quarter_number - 1
+        ).first()
+
+        if previous_quarter:
+            initial_score_blue = previous_quarter.score_blue
+            initial_score_white = previous_quarter.score_white
+            print(f'[Quarter Start] Inheriting scores from Q{quarter_number - 1}: 블루 {initial_score_blue} - 화이트 {initial_score_white}')
+        else:
+            initial_score_blue = 0
+            initial_score_white = 0
+            print(f'[Quarter Start] First quarter, starting from 0-0')
+
         # 쿼터 생성
         quarter = Quarter(
             game_id=game_id,
@@ -1137,8 +1152,8 @@ def start_quarter(game_id):
             bench_blue=bench_blue,
             bench_white=bench_white,
             lineup_snapshot=lineup_snapshot,
-            score_blue=0,
-            score_white=0,
+            score_blue=initial_score_blue,
+            score_white=initial_score_white,
             started_at=datetime.utcnow()
         )
 

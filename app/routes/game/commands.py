@@ -986,14 +986,26 @@ def start_quarter(game_id):
                 'error': f'AWAY team must have at least 5 players. Currently: {len(white_lineups)} players'
             }), 400
 
-        # 라인업 스냅샷 생성 (JSON 호환을 위해 키를 문자열로 저장)
+        # 라인업 스냅샷 생성 (이름과 member_id 함께 저장)
         lineup_snapshot = {
-            '블루': {str(lineup.number): lineup.member for lineup in blue_lineups},
-            '화이트': {str(lineup.number): lineup.member for lineup in white_lineups}
+            '블루': {
+                str(lineup.number): {
+                    'name': lineup.member,
+                    'member_id': lineup.member_id,
+                    'is_guest': lineup.is_guest
+                } for lineup in blue_lineups
+            },
+            '화이트': {
+                str(lineup.number): {
+                    'name': lineup.member,
+                    'member_id': lineup.member_id,
+                    'is_guest': lineup.is_guest
+                } for lineup in white_lineups
+            }
         }
         print(f'[Quarter Start] Snapshot created for Q{quarter_number}:')
-        print(f'  블루: {lineup_snapshot["블루"]}')
-        print(f'  화이트: {lineup_snapshot["화이트"]}')
+        print(f'  블루: {len(lineup_snapshot["블루"])}명')
+        print(f'  화이트: {len(lineup_snapshot["화이트"])}명')
 
         # 쿼터 생성
         quarter = Quarter(

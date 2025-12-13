@@ -40,8 +40,8 @@ class Game(db.Model):
     current_quarter = db.Column(db.Integer, default=0)
     team_home = db.Column(db.String(50))  # 홈팀으로 경기하는 실제 팀 이름
     team_away = db.Column(db.String(50))  # 어웨이팀으로 경기하는 실제 팀 이름
-    final_score_blue = db.Column(db.Integer)
-    final_score_white = db.Column(db.Integer)
+    final_score_home = db.Column(db.Integer)
+    final_score_away = db.Column(db.Integer)
     winner = db.Column(db.String(10))  # home, away, 무승부
 
     # 관계 (CASCADE DELETE)
@@ -64,9 +64,9 @@ class Game(db.Model):
             'team_home': self.team_home,
             'team_away': self.team_away,
             'final_score': {
-                'blue': self.final_score_blue,
-                'white': self.final_score_white
-            } if self.final_score_blue is not None else None,
+                'home': self.final_score_home,
+                'away': self.final_score_away
+            } if self.final_score_home is not None else None,
             'winner': self.winner
         }
 
@@ -121,13 +121,13 @@ class Quarter(db.Model):
     game_id = db.Column(db.String(8), db.ForeignKey('games.game_id', ondelete='CASCADE'), nullable=False)
     quarter_number = db.Column(db.Integer, nullable=False)
     status = db.Column(db.String(20), default='진행중')  # 진행중, 종료
-    playing_blue = db.Column(db.JSON)  # [1, 2, 3, 4, 5]
-    playing_white = db.Column(db.JSON)
-    bench_blue = db.Column(db.JSON)  # [6, 7]
-    bench_white = db.Column(db.JSON)
+    playing_home = db.Column(db.JSON)  # [1, 2, 3, 4, 5]
+    playing_away = db.Column(db.JSON)
+    bench_home = db.Column(db.JSON)  # [6, 7]
+    bench_away = db.Column(db.JSON)
     lineup_snapshot = db.Column(db.JSON)  # {'home': {1: '홍길동', 2: '김철수'}, 'away': {...}}
-    score_blue = db.Column(db.Integer, default=0)
-    score_white = db.Column(db.Integer, default=0)
+    score_home = db.Column(db.Integer, default=0)
+    score_away = db.Column(db.Integer, default=0)
     started_at = db.Column(db.DateTime, default=datetime.utcnow)
     ended_at = db.Column(db.DateTime)
 
@@ -142,17 +142,17 @@ class Quarter(db.Model):
             'quarter': self.quarter_number,
             'status': self.status,
             'playing': {
-                'blue': self.playing_blue or [],
-                'white': self.playing_white or []
+                'home': self.playing_home or [],
+                'away': self.playing_away or []
             },
             'bench': {
-                'blue': self.bench_blue or [],
-                'white': self.bench_white or []
+                'home': self.bench_home or [],
+                'away': self.bench_away or []
             },
             'lineup_snapshot': self.lineup_snapshot or {},
             'score': {
-                'blue': self.score_blue,
-                'white': self.score_white
+                'home': self.score_home,
+                'away': self.score_away
             },
             'started_at': self.started_at.isoformat() + 'Z' if self.started_at else None,
             'ended_at': self.ended_at.isoformat() + 'Z' if self.ended_at else None

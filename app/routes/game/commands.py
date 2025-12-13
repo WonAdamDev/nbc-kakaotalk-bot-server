@@ -266,8 +266,8 @@ def get_all_games():
                 'status': game.status,
                 'current_quarter': game.current_quarter,
                 'winner': game.winner,
-                'final_score_blue': game.final_score_blue,
-                'final_score_white': game.final_score_white
+                'final_score_home': game.final_score_home,
+                'final_score_away': game.final_score_away
             })
 
         return jsonify({
@@ -457,21 +457,21 @@ def end_game(game_id):
             return jsonify({'success': False, 'error': 'No quarters found'}), 400
 
         last_quarter = quarters[-1]
-        total_blue = last_quarter.score_blue
-        total_white = last_quarter.score_white
+        total_home = last_quarter.score_home
+        total_away = last_quarter.score_away
 
         # 승자 결정
-        if total_blue > total_white:
+        if total_home > total_away:
             winner = 'home'
-        elif total_white > total_blue:
+        elif total_away > total_home:
             winner = 'away'
         else:
             winner = '무승부'
 
         game.status = '종료'
         game.ended_at = datetime.utcnow()
-        game.final_score_blue = total_blue
-        game.final_score_white = total_white
+        game.final_score_home = total_home
+        game.final_score_away = total_away
         game.winner = winner
 
         db.session.commit()
@@ -1036,10 +1036,10 @@ def start_quarter(game_id):
     쿼터 시작 (수동 선택 필수)
     Body: {
         "quarter_number": 1 (optional, 기본값: 현재 쿼터 + 1),
-        "playing_blue": [1,2,3,4,5] (required),
-        "bench_blue": [6,7,8] (optional),
-        "playing_white": [1,2,3,4,5] (required),
-        "bench_white": [6,7,8] (optional)
+        "playing_home": [1,2,3,4,5] (required),
+        "bench_home": [6,7,8] (optional),
+        "playing_away": [1,2,3,4,5] (required),
+        "bench_away": [6,7,8] (optional)
     }
     """
     game = Game.query.filter_by(game_id=game_id).first()
@@ -1064,48 +1064,48 @@ def start_quarter(game_id):
 
     try:
         # 수동 선택 필수
-        if 'playing_blue' not in data or 'playing_white' not in data:
+        if 'playing_home' not in data or 'playing_away' not in data:
             return jsonify({
                 'success': False,
-                'error': 'playing_blue and playing_white are required'
+                'error': 'playing_home and playing_away are required'
             }), 400
 
-        playing_blue = data.get('playing_blue', [])
-        bench_blue = data.get('bench_blue', [])
-        playing_white = data.get('playing_white', [])
-        bench_white = data.get('bench_white', [])
+        playing_home = data.get('playing_home', [])
+        bench_home = data.get('bench_home', [])
+        playing_away = data.get('playing_away', [])
+        bench_away = data.get('bench_away', [])
 
         # 유효성 검사 - 선택된 선수가 정확히 5명인지
-        if len(playing_blue) != 5 or len(playing_white) != 5:
+        if len(playing_home) != 5 or len(playing_away) != 5:
             return jsonify({
                 'success': False,
                 'error': 'Each team must have exactly 5 playing players'
             }), 400
 
         # 현재 라인업 조회
-        blue_lineups = Lineup.query.filter_by(
+        home_lineups = Lineup.query.filter_by(
             game_id=game_id,
             team='home',
             arrived=True
         ).all()
 
-        white_lineups = Lineup.query.filter_by(
+        away_lineups = Lineup.query.filter_by(
             game_id=game_id,
             team='away',
             arrived=True
         ).all()
 
         # 유효성 검사 - 각 팀에 최소 5명 이상 있는지 확인
-        if len(blue_lineups) < 5:
+        if len(home_lineups) < 5:
             return jsonify({
                 'success': False,
-                'error': f'HOME team must have at least 5 players. Currently: {len(blue_lineups)} players'
+                'error': f'HOME team must have at least 5 players. Currently: {len(home_lineups)} players'
             }), 400
 
-        if len(white_lineups) < 5:
+        if len(away_lineups) < 5:
             return jsonify({
                 'success': False,
-                'error': f'AWAY team must have at least 5 players. Currently: {len(white_lineups)} players'
+                'error': f'AWAY team must have at least 5 players. Currently: {len(away_lineups)} players'
             }), 400
 
         # 라인업 스냅샷 생성 (이름과 member_id 함께 저장)
@@ -1115,14 +1115,14 @@ def start_quarter(game_id):
                     'name': lineup.member,
                     'member_id': lineup.member_id,
                     'is_guest': lineup.is_guest
-                } for lineup in blue_lineups
+                } for lineup in home_lineups
             },
             'away': {
                 str(lineup.number): {
                     'name': lineup.member,
                     'member_id': lineup.member_id,
                     'is_guest': lineup.is_guest
-                } for lineup in white_lineups
+                } for lineup in away_lineups
             }
         }
         print(f'[Quarter Start] Snapshot created for Q{quarter_number}:')
@@ -1136,12 +1136,12 @@ def start_quarter(game_id):
         ).first()
 
         if previous_quarter:
-            initial_score_blue = previous_quarter.score_blue
-            initial_score_white = previous_quarter.score_white
-            print(f'[Quarter Start] Inheriting scores from Q{quarter_number - 1}: home {initial_score_blue} - away {initial_score_white}')
+            initial_score_home = previous_quarter.score_home
+            initial_score_away = previous_quarter.score_away
+            print(f'[Quarter Start] Inheriting scores from Q{quarter_number - 1}: home {initial_score_home} - away {initial_score_away}')
         else:
-            initial_score_blue = 0
-            initial_score_white = 0
+            initial_score_home = 0
+            initial_score_away = 0
             print(f'[Quarter Start] First quarter, starting from 0-0')
 
         # 쿼터 생성
@@ -1149,13 +1149,13 @@ def start_quarter(game_id):
             game_id=game_id,
             quarter_number=quarter_number,
             status='진행중',
-            playing_blue=playing_blue,
-            playing_white=playing_white,
-            bench_blue=bench_blue,
-            bench_white=bench_white,
+            playing_home=playing_home,
+            playing_away=playing_away,
+            bench_home=bench_home,
+            bench_away=bench_away,
             lineup_snapshot=lineup_snapshot,
-            score_blue=initial_score_blue,
-            score_white=initial_score_white,
+            score_home=initial_score_home,
+            score_away=initial_score_away,
             started_at=datetime.utcnow()
         )
 
@@ -1163,19 +1163,19 @@ def start_quarter(game_id):
         game.current_quarter = quarter_number
 
         # 쿼터 시작 시 라인업의 playing_status 업데이트
-        playing_numbers_blue = set(playing_blue)
-        playing_numbers_white = set(playing_white)
+        playing_numbers_home = set(playing_home)
+        playing_numbers_away = set(playing_away)
 
         # home팀 업데이트
-        for lineup in blue_lineups:
-            if lineup.number in playing_numbers_blue:
+        for lineup in home_lineups:
+            if lineup.number in playing_numbers_home:
                 lineup.playing_status = 'playing'
             else:
                 lineup.playing_status = 'bench'
 
         # away팀 업데이트
-        for lineup in white_lineups:
-            if lineup.number in playing_numbers_white:
+        for lineup in away_lineups:
+            if lineup.number in playing_numbers_away:
                 lineup.playing_status = 'playing'
             else:
                 lineup.playing_status = 'bench'
@@ -1186,13 +1186,13 @@ def start_quarter(game_id):
         emit_game_update(game_id, 'quarter_started', quarter.to_dict())
 
         # WebSocket 브로드캐스트 (라인업 업데이트)
-        updated_blue = Lineup.query.filter_by(
+        updated_home = Lineup.query.filter_by(
             game_id=game_id,
             team='home',
             arrived=True
         ).order_by(Lineup.number).all()
 
-        updated_white = Lineup.query.filter_by(
+        updated_away = Lineup.query.filter_by(
             game_id=game_id,
             team='away',
             arrived=True
@@ -1200,11 +1200,11 @@ def start_quarter(game_id):
 
         emit_game_update(game_id, 'lineup_updated', {
             'team': 'home',
-            'lineups': [l.to_dict() for l in updated_blue]
+            'lineups': [l.to_dict() for l in updated_home]
         })
         emit_game_update(game_id, 'lineup_updated', {
             'team': 'away',
-            'lineups': [l.to_dict() for l in updated_white]
+            'lineups': [l.to_dict() for l in updated_away]
         })
 
         return jsonify({
@@ -1238,32 +1238,32 @@ def end_quarter(game_id, quarter_number):
         quarter.ended_at = datetime.utcnow()
 
         # 쿼터 종료 후 출전/벤치 상태 업데이트
-        # playing_blue, playing_white에 있던 선수들은 'playing'으로, 나머지는 'bench'로 업데이트
-        playing_numbers_blue = set(quarter.playing_blue or [])
-        playing_numbers_white = set(quarter.playing_white or [])
+        # playing_home, playing_away에 있던 선수들은 'playing'으로, 나머지는 'bench'로 업데이트
+        playing_numbers_home = set(quarter.playing_home or [])
+        playing_numbers_away = set(quarter.playing_away or [])
 
         # home팀 업데이트
-        blue_lineups = Lineup.query.filter_by(
+        home_lineups = Lineup.query.filter_by(
             game_id=game_id,
             team='home',
             arrived=True
         ).all()
 
-        for lineup in blue_lineups:
-            if lineup.number in playing_numbers_blue:
+        for lineup in home_lineups:
+            if lineup.number in playing_numbers_home:
                 lineup.playing_status = 'playing'
             else:
                 lineup.playing_status = 'bench'
 
         # away팀 업데이트
-        white_lineups = Lineup.query.filter_by(
+        away_lineups = Lineup.query.filter_by(
             game_id=game_id,
             team='away',
             arrived=True
         ).all()
 
-        for lineup in white_lineups:
-            if lineup.number in playing_numbers_white:
+        for lineup in away_lineups:
+            if lineup.number in playing_numbers_away:
                 lineup.playing_status = 'playing'
             else:
                 lineup.playing_status = 'bench'
@@ -1274,13 +1274,13 @@ def end_quarter(game_id, quarter_number):
         emit_game_update(game_id, 'quarter_ended', quarter.to_dict())
 
         # WebSocket 브로드캐스트 (라인업 업데이트)
-        updated_blue = Lineup.query.filter_by(
+        updated_home = Lineup.query.filter_by(
             game_id=game_id,
             team='home',
             arrived=True
         ).order_by(Lineup.number).all()
 
-        updated_white = Lineup.query.filter_by(
+        updated_away = Lineup.query.filter_by(
             game_id=game_id,
             team='away',
             arrived=True
@@ -1288,11 +1288,11 @@ def end_quarter(game_id, quarter_number):
 
         emit_game_update(game_id, 'lineup_updated', {
             'team': 'home',
-            'lineups': [l.to_dict() for l in updated_blue]
+            'lineups': [l.to_dict() for l in updated_home]
         })
         emit_game_update(game_id, 'lineup_updated', {
             'team': 'away',
-            'lineups': [l.to_dict() for l in updated_white]
+            'lineups': [l.to_dict() for l in updated_away]
         })
 
         return jsonify({
@@ -1358,8 +1358,8 @@ def update_score(game_id, quarter_number):
     """
     쿼터 점수 업데이트
     Body: {
-        "score_blue": 10,
-        "score_white": 8
+        "score_home": 10,
+        "score_away": 8
     }
     """
     quarter = Quarter.query.filter_by(
@@ -1371,22 +1371,22 @@ def update_score(game_id, quarter_number):
         return jsonify({'success': False, 'error': 'Quarter not found'}), 404
 
     data = request.get_json()
-    score_blue = data.get('score_blue')
-    score_white = data.get('score_white')
+    score_home = data.get('score_home')
+    score_away = data.get('score_away')
 
-    if score_blue is None or score_white is None:
-        return jsonify({'success': False, 'error': 'Both score_blue and score_white are required'}), 400
+    if score_home is None or score_away is None:
+        return jsonify({'success': False, 'error': 'Both score_home and score_away are required'}), 400
 
     try:
-        quarter.score_blue = score_blue
-        quarter.score_white = score_white
+        quarter.score_home = score_home
+        quarter.score_away = score_away
         db.session.commit()
 
         # WebSocket 브로드캐스트
         emit_game_update(game_id, 'score_updated', {
             'quarter': quarter_number,
-            'score_blue': score_blue,
-            'score_white': score_white
+            'score_home': score_home,
+            'score_away': score_away
         })
 
         return jsonify({

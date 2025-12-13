@@ -76,8 +76,8 @@ def handle_request_game_state(data):
     # 라인업 조회
     lineups = Lineup.query.filter_by(game_id=game_id).order_by(Lineup.team, Lineup.number).all()
     lineups_data = {
-        '블루': [l.to_dict() for l in lineups if l.team == '블루'],
-        '화이트': [l.to_dict() for l in lineups if l.team == '화이트']
+        'home': [l.to_dict() for l in lineups if l.team == 'home'],
+        'away': [l.to_dict() for l in lineups if l.team == 'away']
     }
 
     # 쿼터 조회

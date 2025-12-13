@@ -352,8 +352,8 @@ def get_game(game_id):
     # 라인업 조회
     lineups = Lineup.query.filter_by(game_id=game_id).order_by(Lineup.team, Lineup.number).all()
     lineups_data = {
-        '블루': [l.to_dict() for l in lineups if l.team == '블루'],
-        '화이트': [l.to_dict() for l in lineups if l.team == '화이트']
+        'home': [l.to_dict() for l in lineups if l.team == 'home'],
+        'away': [l.to_dict() for l in lineups if l.team == 'away']
     }
 
     # 쿼터 조회
@@ -462,9 +462,9 @@ def end_game(game_id):
 
         # 승자 결정
         if total_blue > total_white:
-            winner = '블루'
+            winner = 'home'
         elif total_white > total_blue:
-            winner = '화이트'
+            winner = 'away'
         else:
             winner = '무승부'
 
@@ -521,7 +521,7 @@ def player_arrival(game_id):
     """
     선수 도착 처리
     Body: {
-        "team": "블루" or "화이트",
+        "team": "home" or "away",
         "member": "선수 이름",
         "member_id": "MEM_X7Y2K9P3" (optional, 프리셋 멤버인 경우),
         "team_id": "TEAM_X7Y2K9P3" (optional, 멤버의 팀 ID)
@@ -538,8 +538,8 @@ def player_arrival(game_id):
     member_id = data.get('member_id')  # 프리셋 멤버면 존재
     team_id = data.get('team_id')  # 멤버의 팀 ID
 
-    if team not in ['블루', '화이트']:
-        return jsonify({'success': False, 'error': 'team must be "블루" or "화이트"'}), 400
+    if team not in ['home', 'away']:
+        return jsonify({'success': False, 'error': 'team must be "home" or "away"'}), 400
 
     if not member_name:
         return jsonify({'success': False, 'error': 'member is required'}), 400
@@ -752,15 +752,15 @@ def swap_lineup_numbers(game_id):
     """
     순번 교체 (드래그앤드롭) - 같은 팀 또는 다른 팀 간 교체 지원
     Body: {
-        "from_team": "블루",
+        "from_team": "home",
         "from_number": 5,
-        "to_team": "화이트",
+        "to_team": "away",
         "to_number": 3
     }
 
     또는 기존 호환성을 위한 형식:
     Body: {
-        "team": "블루",
+        "team": "home",
         "from_number": 5,
         "to_number": 3
     }
@@ -786,10 +786,10 @@ def swap_lineup_numbers(game_id):
     data = request.get_json()
 
     # 새 형식 (다른 팀 간 교체 지원)
-    from_team = data.get('from_team')
-    from_number = data.get('from_number')
-    to_team = data.get('to_team')
-    to_number = data.get('to_number')
+    from_team = data.get('from_team') or data.get('team1')
+    from_number = data.get('from_number') or data.get('number1')
+    to_team = data.get('to_team') or data.get('team2')
+    to_number = data.get('to_number') or data.get('number2')
 
     # 기존 형식 호환 (같은 팀 내 교체)
     if not from_team or not to_team:
@@ -798,8 +798,10 @@ def swap_lineup_numbers(game_id):
             from_team = team
             to_team = team
 
-    if from_team not in ['블루', '화이트'] or to_team not in ['블루', '화이트']:
-        return jsonify({'success': False, 'error': 'teams must be "블루" or "화이트"'}), 400
+    # 팀 검증
+    valid_teams = ['home', 'away']
+    if from_team not in valid_teams or to_team not in valid_teams:
+        return jsonify({'success': False, 'error': 'teams must be "home" or "away"'}), 400
 
     if not from_number or not to_number:
         return jsonify({'success': False, 'error': 'from_number and to_number are required'}), 400
@@ -1083,13 +1085,13 @@ def start_quarter(game_id):
         # 현재 라인업 조회
         blue_lineups = Lineup.query.filter_by(
             game_id=game_id,
-            team='블루',
+            team='home',
             arrived=True
         ).all()
 
         white_lineups = Lineup.query.filter_by(
             game_id=game_id,
-            team='화이트',
+            team='away',
             arrived=True
         ).all()
 
@@ -1108,14 +1110,14 @@ def start_quarter(game_id):
 
         # 라인업 스냅샷 생성 (이름과 member_id 함께 저장)
         lineup_snapshot = {
-            '블루': {
+            'home': {
                 str(lineup.number): {
                     'name': lineup.member,
                     'member_id': lineup.member_id,
                     'is_guest': lineup.is_guest
                 } for lineup in blue_lineups
             },
-            '화이트': {
+            'away': {
                 str(lineup.number): {
                     'name': lineup.member,
                     'member_id': lineup.member_id,
@@ -1124,8 +1126,8 @@ def start_quarter(game_id):
             }
         }
         print(f'[Quarter Start] Snapshot created for Q{quarter_number}:')
-        print(f'  블루: {len(lineup_snapshot["블루"])}명')
-        print(f'  화이트: {len(lineup_snapshot["화이트"])}명')
+        print(f'  home: {len(lineup_snapshot["home"])}명')
+        print(f'  away: {len(lineup_snapshot["away"])}명')
 
         # 이전 쿼터의 점수 가져오기
         previous_quarter = Quarter.query.filter_by(
@@ -1136,7 +1138,7 @@ def start_quarter(game_id):
         if previous_quarter:
             initial_score_blue = previous_quarter.score_blue
             initial_score_white = previous_quarter.score_white
-            print(f'[Quarter Start] Inheriting scores from Q{quarter_number - 1}: 블루 {initial_score_blue} - 화이트 {initial_score_white}')
+            print(f'[Quarter Start] Inheriting scores from Q{quarter_number - 1}: home {initial_score_blue} - away {initial_score_white}')
         else:
             initial_score_blue = 0
             initial_score_white = 0
@@ -1164,14 +1166,14 @@ def start_quarter(game_id):
         playing_numbers_blue = set(playing_blue)
         playing_numbers_white = set(playing_white)
 
-        # 블루팀 업데이트
+        # home팀 업데이트
         for lineup in blue_lineups:
             if lineup.number in playing_numbers_blue:
                 lineup.playing_status = 'playing'
             else:
                 lineup.playing_status = 'bench'
 
-        # 화이트팀 업데이트
+        # away팀 업데이트
         for lineup in white_lineups:
             if lineup.number in playing_numbers_white:
                 lineup.playing_status = 'playing'
@@ -1186,22 +1188,22 @@ def start_quarter(game_id):
         # WebSocket 브로드캐스트 (라인업 업데이트)
         updated_blue = Lineup.query.filter_by(
             game_id=game_id,
-            team='블루',
+            team='home',
             arrived=True
         ).order_by(Lineup.number).all()
 
         updated_white = Lineup.query.filter_by(
             game_id=game_id,
-            team='화이트',
+            team='away',
             arrived=True
         ).order_by(Lineup.number).all()
 
         emit_game_update(game_id, 'lineup_updated', {
-            'team': '블루',
+            'team': 'home',
             'lineups': [l.to_dict() for l in updated_blue]
         })
         emit_game_update(game_id, 'lineup_updated', {
-            'team': '화이트',
+            'team': 'away',
             'lineups': [l.to_dict() for l in updated_white]
         })
 
@@ -1240,10 +1242,10 @@ def end_quarter(game_id, quarter_number):
         playing_numbers_blue = set(quarter.playing_blue or [])
         playing_numbers_white = set(quarter.playing_white or [])
 
-        # 블루팀 업데이트
+        # home팀 업데이트
         blue_lineups = Lineup.query.filter_by(
             game_id=game_id,
-            team='블루',
+            team='home',
             arrived=True
         ).all()
 
@@ -1253,10 +1255,10 @@ def end_quarter(game_id, quarter_number):
             else:
                 lineup.playing_status = 'bench'
 
-        # 화이트팀 업데이트
+        # away팀 업데이트
         white_lineups = Lineup.query.filter_by(
             game_id=game_id,
-            team='화이트',
+            team='away',
             arrived=True
         ).all()
 
@@ -1274,22 +1276,22 @@ def end_quarter(game_id, quarter_number):
         # WebSocket 브로드캐스트 (라인업 업데이트)
         updated_blue = Lineup.query.filter_by(
             game_id=game_id,
-            team='블루',
+            team='home',
             arrived=True
         ).order_by(Lineup.number).all()
 
         updated_white = Lineup.query.filter_by(
             game_id=game_id,
-            team='화이트',
+            team='away',
             arrived=True
         ).order_by(Lineup.number).all()
 
         emit_game_update(game_id, 'lineup_updated', {
-            'team': '블루',
+            'team': 'home',
             'lineups': [l.to_dict() for l in updated_blue]
         })
         emit_game_update(game_id, 'lineup_updated', {
-            'team': '화이트',
+            'team': 'away',
             'lineups': [l.to_dict() for l in updated_white]
         })
 

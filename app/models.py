@@ -42,7 +42,7 @@ class Game(db.Model):
     team_away = db.Column(db.String(50))  # 어웨이팀으로 경기하는 실제 팀 이름
     final_score_blue = db.Column(db.Integer)
     final_score_white = db.Column(db.Integer)
-    winner = db.Column(db.String(10))  # 블루, 화이트, 무승부
+    winner = db.Column(db.String(10))  # home, away, 무승부
 
     # 관계 (CASCADE DELETE)
     lineups = db.relationship('Lineup', backref='game', cascade='all, delete-orphan', lazy=True)
@@ -86,7 +86,7 @@ class Lineup(db.Model):
     team_id_snapshot = db.Column(db.String(13), nullable=True)  # TEAM_X7Y2K9P3
 
     # 기존 필드
-    team = db.Column(db.String(10), nullable=False)  # 블루, 화이트
+    team = db.Column(db.String(10), nullable=False)  # home, away
     member = db.Column(db.String(50), nullable=False)  # 이름 (표시용)
     number = db.Column(db.Integer, nullable=False)
     arrived = db.Column(db.Boolean, default=True)
@@ -125,7 +125,7 @@ class Quarter(db.Model):
     playing_white = db.Column(db.JSON)
     bench_blue = db.Column(db.JSON)  # [6, 7]
     bench_white = db.Column(db.JSON)
-    lineup_snapshot = db.Column(db.JSON)  # {'블루': {1: '홍길동', 2: '김철수'}, '화이트': {...}}
+    lineup_snapshot = db.Column(db.JSON)  # {'home': {1: '홍길동', 2: '김철수'}, 'away': {...}}
     score_blue = db.Column(db.Integer, default=0)
     score_white = db.Column(db.Integer, default=0)
     started_at = db.Column(db.DateTime, default=datetime.utcnow)

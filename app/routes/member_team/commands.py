@@ -69,6 +69,7 @@ def member_team_post_command():
     request_room = data.get('room', 'unknown')
     request_member = data.get('member', 'unknown')
     request_team = data.get('team')
+    request_member_id = data.get('member_id')  # 선택적 파라미터
 
     if not request_team:
         return jsonify({
@@ -80,11 +81,72 @@ def member_team_post_command():
         # MongoDB에서 처리
         mongo_db = cache_manager.mongo_db
         if mongo_db is not None:
+            # member_id가 제공된 경우
+            if request_member_id:
+                member_doc = mongo_db['members'].find_one({
+                    '_id': request_member_id,
+                    'room_name': request_room
+                })
+                if not member_doc:
+                    return jsonify({
+                        'success': False,
+                        'data': {
+                            'member': request_member,
+                            'member_id': request_member_id,
+                            'team': request_team,
+                            'assigned': False,
+                            'reason': 'member_not_found'
+                        }
+                    }), 404
+            else:
+                # 이름으로 조회 - 동명이인 체크
+                member_docs = list(mongo_db['members'].find({
+                    'room_name': request_room,
+                    'name': request_member
+                }))
+
+                if len(member_docs) == 0:
+                    return jsonify({
+                        'success': False,
+                        'data': {
+                            'member': request_member,
+                            'team': request_team,
+                            'assigned': False,
+                            'reason': 'member_not_found'
+                        }
+                    }), 404
+                elif len(member_docs) > 1:
+                    # 동명이인 있음
+                    duplicates = []
+                    for doc in member_docs:
+                        team_id = doc.get('team_id')
+                        team_name = None
+                        if team_id:
+                            team_doc = mongo_db['teams'].find_one({'_id': team_id})
+                            if team_doc:
+                                team_name = team_doc.get('name')
+
+                        duplicates.append({
+                            'member_id': doc.get('_id'),
+                            'team': team_name
+                        })
+
+                    return jsonify({
+                        'success': False,
+                        'message': '동명이인이 존재합니다. member_id를 지정해주세요.',
+                        'data': {
+                            'member': request_member,
+                            'team': request_team,
+                            'assigned': False,
+                            'reason': 'duplicate_members',
+                            'duplicates': duplicates,
+                            'count': len(duplicates)
+                        }
+                    }), 409
+
+                member_doc = member_docs[0]
+
             # 멤버 존재 확인
-            member_doc = mongo_db['members'].find_one({
-                'room_name': request_room,
-                'name': request_member
-            })
             if not member_doc:
                 return jsonify({
                     'success': False,
@@ -200,13 +262,132 @@ def member_team_delete_command():
 
     request_room = data.get('room', 'unknown')
     request_member = data.get('member', 'unknown')
+    request_member_id = data.get('member_id')  # 선택적 파라미터
 
     try:
-        member_key = make_member_key(request_room, request_member)
+        mongo_db = cache_manager.mongo_db
+        if mongo_db is not None:
+            # member_id가 제공된 경우
+            if request_member_id:
+                member_doc = mongo_db['members'].find_one({
+                    '_id': request_member_id,
+                    'room_name': request_room
+                })
+                if not member_doc:
+                    return jsonify({
+                        'success': False,
+                        'data': {
+                            'member': request_member,
+                            'member_id': request_member_id,
+                            'unassigned': False,
+                            'reason': 'member_not_found'
+                        }
+                    }), 404
 
-        # 멤버가 존재하는지 확인
-        member = cache_manager.get('members', member_key)
-        if not member:
+                # 팀 배정 해제
+                previous_team_id = member_doc.get('team_id')
+                previous_team_name = None
+                if previous_team_id:
+                    team_doc = mongo_db['teams'].find_one({'_id': previous_team_id})
+                    if team_doc:
+                        previous_team_name = team_doc.get('name')
+
+                mongo_db['members'].update_one(
+                    {'_id': request_member_id},
+                    {'$set': {'team_id': None}}
+                )
+
+                # Redis 캐시에서도 삭제
+                member_key = make_member_key(request_room, member_doc.get('name'))
+                cache_manager.delete('member_teams', member_key)
+
+                return jsonify({
+                    'success': True,
+                    'data': {
+                        'member': member_doc.get('name'),
+                        'member_id': request_member_id,
+                        'previous_team': previous_team_name,
+                        'unassigned': True
+                    }
+                }), 200
+            else:
+                # 이름으로 조회 - 동명이인 체크
+                member_docs = list(mongo_db['members'].find({
+                    'room_name': request_room,
+                    'name': request_member
+                }))
+
+                if len(member_docs) == 0:
+                    return jsonify({
+                        'success': False,
+                        'data': {
+                            'member': request_member,
+                            'unassigned': False,
+                            'reason': 'member_not_found'
+                        }
+                    }), 404
+                elif len(member_docs) > 1:
+                    # 동명이인 있음
+                    duplicates = []
+                    for doc in member_docs:
+                        team_id = doc.get('team_id')
+                        team_name = None
+                        if team_id:
+                            team_doc = mongo_db['teams'].find_one({'_id': team_id})
+                            if team_doc:
+                                team_name = team_doc.get('name')
+
+                        duplicates.append({
+                            'member_id': doc.get('_id'),
+                            'team': team_name
+                        })
+
+                    return jsonify({
+                        'success': False,
+                        'message': '동명이인이 존재합니다. member_id를 지정해주세요.',
+                        'data': {
+                            'member': request_member,
+                            'unassigned': False,
+                            'reason': 'duplicate_members',
+                            'duplicates': duplicates,
+                            'count': len(duplicates)
+                        }
+                    }), 409
+
+                # 동명이인 없음 - 해제
+                member_doc = member_docs[0]
+                previous_team_id = member_doc.get('team_id')
+                previous_team_name = None
+                if previous_team_id:
+                    team_doc = mongo_db['teams'].find_one({'_id': previous_team_id})
+                    if team_doc:
+                        previous_team_name = team_doc.get('name')
+
+                mongo_db['members'].update_one(
+                    {'_id': member_doc['_id']},
+                    {'$set': {'team_id': None}}
+                )
+
+                # Redis 캐시에서도 삭제
+                member_key = make_member_key(request_room, request_member)
+                cache_manager.delete('member_teams', member_key)
+
+                return jsonify({
+                    'success': True,
+                    'data': {
+                        'member': request_member,
+                        'member_id': member_doc['_id'],
+                        'previous_team': previous_team_name,
+                        'unassigned': True
+                    }
+                }), 200
+        else:
+            # MongoDB 없으면 기존 방식
+            member_key = make_member_key(request_room, request_member)
+
+            # 멤버가 존재하는지 확인
+            member = cache_manager.get('members', member_key)
+            if not member:
             return jsonify({
                 'success': False,
                 'data': {

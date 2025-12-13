@@ -986,10 +986,51 @@ def start_quarter(game_id):
 
         db.session.add(quarter)
         game.current_quarter = quarter_number
+
+        # 쿼터 시작 시 라인업의 playing_status 업데이트
+        playing_numbers_blue = set(playing_blue)
+        playing_numbers_white = set(playing_white)
+
+        # 블루팀 업데이트
+        for lineup in blue_lineups:
+            if lineup.number in playing_numbers_blue:
+                lineup.playing_status = 'playing'
+            else:
+                lineup.playing_status = 'bench'
+
+        # 화이트팀 업데이트
+        for lineup in white_lineups:
+            if lineup.number in playing_numbers_white:
+                lineup.playing_status = 'playing'
+            else:
+                lineup.playing_status = 'bench'
+
         db.session.commit()
 
-        # WebSocket 브로드캐스트
+        # WebSocket 브로드캐스트 (쿼터 시작)
         emit_game_update(game_id, 'quarter_started', quarter.to_dict())
+
+        # WebSocket 브로드캐스트 (라인업 업데이트)
+        updated_blue = Lineup.query.filter_by(
+            game_id=game_id,
+            team='블루',
+            arrived=True
+        ).order_by(Lineup.number).all()
+
+        updated_white = Lineup.query.filter_by(
+            game_id=game_id,
+            team='화이트',
+            arrived=True
+        ).order_by(Lineup.number).all()
+
+        emit_game_update(game_id, 'lineup_updated', {
+            'team': '블루',
+            'lineups': [l.to_dict() for l in updated_blue]
+        })
+        emit_game_update(game_id, 'lineup_updated', {
+            'team': '화이트',
+            'lineups': [l.to_dict() for l in updated_white]
+        })
 
         return jsonify({
             'success': True,

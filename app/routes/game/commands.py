@@ -257,6 +257,8 @@ def get_all_games():
                 'game_id': game.game_id,
                 'url': f"{frontend_url}/game/{game.game_id}",
                 'room': game.room,
+                'room_id': game.room_id,
+                'room_url': f"{frontend_url}/room/{game.room_id}",
                 'creator': game.creator,
                 'date': game.date.isoformat() if game.date else None,
                 'created_at': game.created_at.isoformat() if game.created_at else None,

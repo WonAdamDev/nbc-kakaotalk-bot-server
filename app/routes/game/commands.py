@@ -100,6 +100,40 @@ def create_game():
         }), 201
 
     except Exception as e:
+        from sqlalchemy.exc import OperationalError, ProgrammingError
+
+        # 테이블이 존재하지 않는 경우 자동 생성 후 재시도
+        if isinstance(e, (OperationalError, ProgrammingError)):
+            print(f"[/api/game/create] Database error (table might not exist): {str(e)}")
+            print("[/api/game/create] Attempting to create tables...")
+
+            try:
+                db.session.rollback()
+                db.create_all()
+                print("[/api/game/create] Tables created successfully")
+
+                # 재시도
+                db.session.add(game)
+                db.session.commit()
+
+                frontend_url = get_frontend_url()
+                game_url = f"{frontend_url}/game/{game_id}"
+
+                return jsonify({
+                    'success': True,
+                    'data': {
+                        'game_id': game_id,
+                        'url': game_url,
+                        'game': game.to_dict()
+                    }
+                }), 201
+
+            except Exception as retry_error:
+                print(f"[/api/game/create] Retry failed: {str(retry_error)}")
+                db.session.rollback()
+                return jsonify({'success': False, 'error': f'Failed to create game after table creation: {str(retry_error)}'}), 500
+
+        # 그 외 에러는 500으로 반환
         db.session.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
 
@@ -191,6 +225,28 @@ def get_all_games():
         }), 200
 
     except Exception as e:
+        from sqlalchemy.exc import OperationalError, ProgrammingError
+
+        # 테이블이 존재하지 않는 경우 빈 결과 반환
+        if isinstance(e, (OperationalError, ProgrammingError)):
+            print(f"[/api/game/all] Database error (table might not exist): {str(e)}")
+            return jsonify({
+                'success': True,
+                'data': {
+                    'games': [],
+                    'pagination': {
+                        'page': 1,
+                        'limit': limit if 'limit' in locals() else 10,
+                        'total_items': 0,
+                        'total_pages': 0,
+                        'has_next': False,
+                        'has_prev': False
+                    }
+                }
+            }), 200
+
+        # 그 외 에러는 500으로 반환
+        print(f"[/api/game/all] Unexpected error: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 

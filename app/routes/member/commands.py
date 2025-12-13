@@ -1,5 +1,7 @@
 from flask import Blueprint, request, jsonify
 from app import cache_manager
+from app.utils import generate_member_id
+from datetime import datetime
 import re
 
 bp = Blueprint('member_commands', __name__, url_prefix='/api/commands/member')
@@ -29,29 +31,69 @@ def member_get_command():
     print(f"[MEMBER GET] Query params: room={query_room}, member={query_member}")
 
     try:
-        member_key = make_member_key(query_room, query_member)
-        member = cache_manager.get('members', member_key)
+        # MongoDB에서 멤버 조회
+        mongo_db = cache_manager.mongo_db
+        if mongo_db is not None:
+            member_doc = mongo_db['members'].find_one({
+                'room_name': query_room,
+                'name': query_member
+            })
 
-        if member:
-            team = cache_manager.get('member_teams', member_key)
+            if member_doc:
+                member_id = member_doc.get('_id')
+                team_id = member_doc.get('team_id')
 
-            return jsonify({
-                'success': True,
-                'data': {
-                    'member': query_member,
-                    'team': team,
-                    'exists': True
-                }
-            }), 200
+                # 팀 이름 조회
+                team_name = None
+                if team_id:
+                    team_doc = mongo_db['teams'].find_one({'_id': team_id})
+                    if team_doc:
+                        team_name = team_doc.get('name')
+
+                return jsonify({
+                    'success': True,
+                    'data': {
+                        'member': query_member,
+                        'member_id': member_id,
+                        'team': team_name,
+                        'team_id': team_id,
+                        'exists': True
+                    }
+                }), 200
+            else:
+                return jsonify({
+                    'success': False,
+                    'data': {
+                        'member': query_member,
+                        'exists': False
+                    }
+                }), 404
         else:
-            return jsonify({
-                'success': False,
-                'data': {
-                    'member': query_member,
-                    'exists': False
-                }
-            }), 404
+            # MongoDB 없으면 Redis에서 조회
+            member_key = make_member_key(query_room, query_member)
+            member = cache_manager.get('members', member_key)
+
+            if member:
+                team = cache_manager.get('member_teams', member_key)
+                return jsonify({
+                    'success': True,
+                    'data': {
+                        'member': query_member,
+                        'team': team,
+                        'exists': True
+                    }
+                }), 200
+            else:
+                return jsonify({
+                    'success': False,
+                    'data': {
+                        'member': query_member,
+                        'exists': False
+                    }
+                }), 404
+
     except Exception as e:
+        print(f"[MEMBER GET] Error: {e}")
         return jsonify({
             'success': False,
             'message': f'오류가 발생했습니다: {str(e)}'
@@ -72,16 +114,66 @@ def member_post_command():
     request_member = data.get('member', 'unknown')
 
     try:
-        key = make_member_key(request_room, request_member)
-        cache_manager.set('members', key, request_member)
-        return jsonify({
-            'success': True,
-            'data': {
-                'member': request_member
+        # MongoDB에서 중복 확인
+        mongo_db = cache_manager.mongo_db
+        if mongo_db is not None:
+            existing_member = mongo_db['members'].find_one({
+                'room_name': request_room,
+                'name': request_member
+            })
+
+            if existing_member:
+                return jsonify({
+                    'success': True,
+                    'data': {
+                        'member': request_member,
+                        'member_id': existing_member.get('_id'),
+                        'team_id': existing_member.get('team_id'),
+                        'already_exists': True
+                    }
+                }), 200
+
+            # 멤버 ID 발급
+            member_id = generate_member_id()
+
+            # MongoDB에 document로 저장
+            member_doc = {
+                '_id': member_id,
+                'room_name': request_room,
+                'name': request_member,
+                'team_id': None,  # 초기에는 팀 미배정
+                'created_at': datetime.utcnow()
             }
-        }), 200
+            mongo_db['members'].insert_one(member_doc)
+
+            # Redis 캐시에도 저장 (하위 호환성)
+            key = make_member_key(request_room, request_member)
+            cache_manager.set('members', key, request_member)
+
+            print(f"[MEMBER POST] Created member: {member_id} ({request_member})")
+
+            return jsonify({
+                'success': True,
+                'data': {
+                    'member': request_member,
+                    'member_id': member_id,
+                    'team_id': None,
+                    'already_exists': False
+                }
+            }), 200
+        else:
+            # MongoDB 없으면 기존 방식 사용
+            key = make_member_key(request_room, request_member)
+            cache_manager.set('members', key, request_member)
+            return jsonify({
+                'success': True,
+                'data': {
+                    'member': request_member
+                }
+            }), 200
 
     except Exception as e:
+        print(f"[MEMBER POST] Error: {e}")
         return jsonify({
             'success': False,
             'message': f'오류가 발생했습니다: {str(e)}'
@@ -144,27 +236,31 @@ def member_list_command():
         # MongoDB에서 해당 방의 모든 멤버 조회
         if cache_manager.mongo_db is not None:
             try:
-                # members 컬렉션에서 해당 방의 멤버 찾기
-                # 키 패턴: room:{room}:member:{member}
-                pattern_prefix = f"room:{query_room}:member:"
-
+                # 새 구조: room_name 필드로 검색
                 mongo_collection = cache_manager.mongo_db['members']
                 documents = mongo_collection.find({
-                    "_id": {"$regex": f"^{re.escape(pattern_prefix)}"}
+                    'room_name': query_room
                 })
 
                 for doc in documents:
-                    key = doc.get("_id")
-                    if key:
-                        room, member_name = extract_room_and_member_from_key(key)
-                        if room == query_room and member_name:
-                            # 멤버의 팀 정보도 조회
-                            team = cache_manager.get('member_teams', key)
-                            members.append({
-                                'name': member_name,
-                                'room': room,
-                                'team': team  # 팀 정보 추가 (None일 수 있음)
-                            })
+                    member_id = doc.get('_id')
+                    member_name = doc.get('name')
+                    team_id = doc.get('team_id')
+
+                    # 팀 이름 조회
+                    team_name = None
+                    if team_id:
+                        team_doc = cache_manager.mongo_db['teams'].find_one({'_id': team_id})
+                        if team_doc:
+                            team_name = team_doc.get('name')
+
+                    members.append({
+                        'name': member_name,
+                        'member_id': member_id,
+                        'room': query_room,
+                        'team': team_name,
+                        'team_id': team_id
+                    })
 
                 print(f"[MEMBER LIST] Found {len(members)} members in room '{query_room}'")
 
@@ -172,7 +268,7 @@ def member_list_command():
                 print(f"[MEMBER LIST] MongoDB error: {e}")
 
         # 중복 제거 및 정렬
-        unique_members = {m['name']: m for m in members}.values()
+        unique_members = {m['member_id']: m for m in members}.values()
         sorted_members = sorted(unique_members, key=lambda x: x['name'])
 
         return jsonify({
@@ -185,6 +281,7 @@ def member_list_command():
         }), 200
 
     except Exception as e:
+        print(f"[MEMBER LIST] Error: {e}")
         return jsonify({
             'success': False,
             'message': f'오류가 발생했습니다: {str(e)}'

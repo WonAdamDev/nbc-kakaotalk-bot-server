@@ -77,48 +77,110 @@ def member_team_post_command():
         }), 400
 
     try:
-        member_key = make_member_key(request_room, request_member)
+        # MongoDB에서 처리
+        mongo_db = cache_manager.mongo_db
+        if mongo_db is not None:
+            # 멤버 존재 확인
+            member_doc = mongo_db['members'].find_one({
+                'room_name': request_room,
+                'name': request_member
+            })
+            if not member_doc:
+                return jsonify({
+                    'success': False,
+                    'data': {
+                        'member': request_member,
+                        'team': request_team,
+                        'assigned': False,
+                        'reason': 'member_not_found'
+                    }
+                }), 404
 
-        # 멤버가 존재하는지 확인
-        member = cache_manager.get('members', member_key)
-        if not member:
+            # 팀 존재 확인 및 team_id 가져오기
+            team_doc = mongo_db['teams'].find_one({
+                'room_name': request_room,
+                'name': request_team
+            })
+            if not team_doc:
+                return jsonify({
+                    'success': False,
+                    'data': {
+                        'member': request_member,
+                        'team': request_team,
+                        'assigned': False,
+                        'reason': 'team_not_found'
+                    }
+                }), 404
+
+            team_id = team_doc.get('_id')
+
+            # MongoDB에서 멤버의 team_id 업데이트
+            mongo_db['members'].update_one(
+                {'_id': member_doc['_id']},
+                {'$set': {'team_id': team_id}}
+            )
+
+            # Redis 캐시에도 저장 (하위 호환성)
+            member_key = make_member_key(request_room, request_member)
+            cache_manager.set('member_teams', member_key, request_team)
+
+            print(f"[MEMBER_TEAM POST] Assigned {request_member} to team {request_team} (ID: {team_id})")
+
             return jsonify({
-                'success': False,
+                'success': True,
+                'data': {
+                    'member': request_member,
+                    'member_id': member_doc['_id'],
+                    'team': request_team,
+                    'team_id': team_id,
+                    'assigned': True
+                }
+            }), 200
+        else:
+            # MongoDB 없으면 기존 방식 사용
+            member_key = make_member_key(request_room, request_member)
+
+            # 멤버가 존재하는지 확인
+            member = cache_manager.get('members', member_key)
+            if not member:
+                return jsonify({
+                    'success': False,
+                    'data': {
+                        'member': request_member,
+                        'team': request_team,
+                        'assigned': False,
+                        'reason': 'member_not_found'
+                    }
+                }), 404
+
+            # 팀이 존재하는지 확인
+            team_key = f"room:{request_room}:team:{request_team}"
+            team = cache_manager.get('teams', team_key)
+            if not team:
+                return jsonify({
+                    'success': False,
+                    'data': {
+                        'member': request_member,
+                        'team': request_team,
+                        'assigned': False,
+                        'reason': 'team_not_found'
+                    }
+                }), 404
+
+            # 팀 배정
+            cache_manager.set('member_teams', member_key, request_team)
+
+            return jsonify({
+                'success': True,
                 'data': {
                     'member': request_member,
                     'team': request_team,
-                    'assigned': False,
-                    'reason': 'member_not_found'
+                    'assigned': True
                 }
-            }), 404
-
-        # 팀이 존재하는지 확인
-        team_key = f"room:{request_room}:team:{request_team}"
-        team = cache_manager.get('teams', team_key)
-        if not team:
-            return jsonify({
-                'success': False,
-                'data': {
-                    'member': request_member,
-                    'team': request_team,
-                    'assigned': False,
-                    'reason': 'team_not_found'
-                }
-            }), 404
-
-        # 팀 배정
-        cache_manager.set('member_teams', member_key, request_team)
-
-        return jsonify({
-            'success': True,
-            'data': {
-                'member': request_member,
-                'team': request_team,
-                'assigned': True
-            }
-        }), 200
+            }), 200
 
     except Exception as e:
+        print(f"[MEMBER_TEAM POST] Error: {e}")
         return jsonify({
             'success': False,
             'message': f'오류가 발생했습니다: {str(e)}'

@@ -20,7 +20,7 @@ class Room(db.Model):
         return {
             'room_id': self.room_id,
             'name': self.name,
-            'created_at': self.created_at.isoformat() if self.created_at else None
+            'created_at': self.created_at.isoformat() + 'Z' if self.created_at else None
         }
 
 
@@ -56,9 +56,9 @@ class Game(db.Model):
             'room': self.room,
             'creator': self.creator,
             'date': self.date.isoformat() if self.date else None,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'started_at': self.started_at.isoformat() if self.started_at else None,
-            'ended_at': self.ended_at.isoformat() if self.ended_at else None,
+            'created_at': self.created_at.isoformat() + 'Z' if self.created_at else None,
+            'started_at': self.started_at.isoformat() + 'Z' if self.started_at else None,
+            'ended_at': self.ended_at.isoformat() + 'Z' if self.ended_at else None,
             'status': self.status,
             'current_quarter': self.current_quarter,
             'team_home': self.team_home,
@@ -108,7 +108,7 @@ class Lineup(db.Model):
             'member': self.member,
             'number': self.number,
             'arrived': self.arrived,
-            'arrived_at': self.arrived_at.isoformat() if self.arrived_at else None,
+            'arrived_at': self.arrived_at.isoformat() + 'Z' if self.arrived_at else None,
             'playing_status': self.playing_status or 'playing'
         }
 
@@ -154,6 +154,6 @@ class Quarter(db.Model):
                 'blue': self.score_blue,
                 'white': self.score_white
             },
-            'started_at': self.started_at.isoformat() if self.started_at else None,
-            'ended_at': self.ended_at.isoformat() if self.ended_at else None
+            'started_at': self.started_at.isoformat() + 'Z' if self.started_at else None,
+            'ended_at': self.ended_at.isoformat() + 'Z' if self.ended_at else None
         }

@@ -37,6 +37,19 @@ def migrate_team_names():
     session = Session()
 
     try:
+        # 테이블 존재 확인
+        print(f"\n[Checking tables...]")
+        table_exists = session.execute(text(
+            "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'lineups')"
+        )).scalar()
+
+        if not table_exists:
+            print("[ERROR] Table 'lineups' does not exist")
+            session.close()
+            return
+
+        print(f"  Table 'lineups' found ✓")
+
         # 현재 상태 확인
         print(f"\n[Before Migration]")
         blue_count = session.execute(text("SELECT COUNT(*) FROM lineups WHERE team = '블루'")).scalar()
@@ -87,7 +100,12 @@ def migrate_team_names():
 
     except Exception as e:
         session.rollback()
-        print(f"\n[ERROR] Migration failed: {e}")
+        print(f"\n[ERROR] Migration failed!")
+        print(f"Error type: {type(e).__name__}")
+        print(f"Error message: {str(e)}")
+        import traceback
+        print(f"\nFull traceback:")
+        traceback.print_exc()
         raise
     finally:
         session.close()

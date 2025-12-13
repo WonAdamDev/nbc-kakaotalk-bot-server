@@ -1,6 +1,6 @@
 -- Add member_id columns to lineups table for player tracking
 
--- Add member_id column (MEM_X7Y2K9P3 or GUEST_X7Y2K9P3)
+-- Add member_id column (MEM_X7Y2K9P3 or GST_X7Y2K9P3)
 ALTER TABLE lineups
 ADD COLUMN IF NOT EXISTS member_id VARCHAR(13);
 
@@ -20,6 +20,6 @@ CREATE INDEX IF NOT EXISTS idx_lineup_is_guest ON lineups(is_guest);
 -- is_guest defaults to FALSE (existing data treated as members)
 
 -- Column descriptions:
--- member_id: Player ID (MEM_xxx: room member, GUEST_xxx: guest player)
+-- member_id: Player ID (MEM_xxx: room member, GST_xxx: guest player)
 -- is_guest: Guest flag (excluded from statistics)
 -- team_id_snapshot: Team ID snapshot at the time of game

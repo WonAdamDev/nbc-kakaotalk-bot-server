@@ -79,7 +79,7 @@ class Lineup(db.Model):
     game_id = db.Column(db.String(8), db.ForeignKey('games.game_id', ondelete='CASCADE'), nullable=False)
 
     # 선수 식별 (새로 추가)
-    member_id = db.Column(db.String(13), nullable=True)  # MEM_X7Y2K9P3 또는 GUEST_X7Y2K9P3
+    member_id = db.Column(db.String(13), nullable=True)  # MEM_X7Y2K9P3 또는 GST_X7Y2K9P3
     is_guest = db.Column(db.Boolean, default=False)
 
     # 경기 당시 스냅샷 (새로 추가)

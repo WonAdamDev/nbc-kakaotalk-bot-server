@@ -3,7 +3,7 @@
 """
 from flask import Blueprint, request, jsonify, current_app
 from datetime import datetime, date
-from app.models import db, Game, Lineup, Quarter
+from app.models import db, Game, Lineup, Quarter, Room
 from app import socketio
 import uuid
 
@@ -13,6 +13,38 @@ bp = Blueprint('game', __name__, url_prefix='/api/game')
 def generate_game_id():
     """8자리 고유 게임 ID 생성"""
     return str(uuid.uuid4())[:8].upper()
+
+
+def generate_room_id():
+    """8자리 고유 방 ID 생성"""
+    return str(uuid.uuid4())[:8].upper()
+
+
+def get_or_create_room(room_name):
+    """
+    방 이름으로 방을 조회하거나 없으면 생성
+    Returns: room_id (str)
+    """
+    # 기존 방 조회
+    room = Room.query.filter_by(name=room_name).first()
+
+    if room:
+        return room.room_id
+
+    # 새 방 생성
+    room_id = generate_room_id()
+    while Room.query.filter_by(room_id=room_id).first():
+        room_id = generate_room_id()
+
+    new_room = Room(
+        room_id=room_id,
+        name=room_name
+    )
+
+    db.session.add(new_room)
+    db.session.flush()  # room_id를 확정하지만 아직 커밋하지 않음
+
+    return room_id
 
 
 def emit_game_update(game_id, event_type, data):
@@ -72,17 +104,21 @@ def create_game():
     while Game.query.filter_by(game_id=game_id).first():
         game_id = generate_game_id()
 
-    # 게임 생성
-    game = Game(
-        game_id=game_id,
-        room=room,
-        creator=creator,
-        date=game_date,
-        status='준비중',
-        current_quarter=0
-    )
-
     try:
+        # 방 조회 또는 생성
+        room_id = get_or_create_room(room)
+
+        # 게임 생성
+        game = Game(
+            game_id=game_id,
+            room_id=room_id,
+            room=room,
+            creator=creator,
+            date=game_date,
+            status='준비중',
+            current_quarter=0
+        )
+
         db.session.add(game)
         db.session.commit()
 
@@ -109,11 +145,28 @@ def create_game():
 
             try:
                 db.session.rollback()
-                db.create_all()
+
+                # 테이블 생성
+                from flask import current_app
+                with current_app.app_context():
+                    db.create_all()
                 print("[/api/game/create] Tables created successfully")
 
-                # 재시도
-                db.session.add(game)
+                # 방 조회 또는 생성
+                room_id = get_or_create_room(room)
+
+                # 새로운 game 객체 생성 (기존 객체는 rollback으로 무효화됨)
+                new_game = Game(
+                    game_id=game_id,
+                    room_id=room_id,
+                    room=room,
+                    creator=creator,
+                    date=game_date,
+                    status='준비중',
+                    current_quarter=0
+                )
+
+                db.session.add(new_game)
                 db.session.commit()
 
                 frontend_url = get_frontend_url()
@@ -124,16 +177,21 @@ def create_game():
                     'data': {
                         'game_id': game_id,
                         'url': game_url,
-                        'game': game.to_dict()
+                        'game': new_game.to_dict()
                     }
                 }), 201
 
             except Exception as retry_error:
                 print(f"[/api/game/create] Retry failed: {str(retry_error)}")
+                import traceback
+                traceback.print_exc()
                 db.session.rollback()
                 return jsonify({'success': False, 'error': f'Failed to create game after table creation: {str(retry_error)}'}), 500
 
         # 그 외 에러는 500으로 반환
+        print(f"[/api/game/create] Unexpected error: {str(e)}")
+        import traceback
+        traceback.print_exc()
         db.session.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
 

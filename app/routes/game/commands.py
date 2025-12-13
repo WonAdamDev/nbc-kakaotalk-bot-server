@@ -5,6 +5,7 @@ from flask import Blueprint, request, jsonify, current_app
 from datetime import datetime, date
 from app.models import db, Game, Lineup, Quarter, Room
 from app import socketio
+from app.utils import generate_guest_id
 import uuid
 
 bp = Blueprint('game', __name__, url_prefix='/api/game')
@@ -573,8 +574,7 @@ def player_arrival(game_id):
 
         # 게스트인 경우 임시 ID 발급
         if is_guest:
-            import uuid
-            member_id = f"GUEST_{str(uuid.uuid4())[:8].upper()}"
+            member_id = generate_guest_id()
 
         # 해당 팀의 다음 번호 계산
         last_lineup = Lineup.query.filter_by(

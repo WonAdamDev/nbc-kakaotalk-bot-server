@@ -38,7 +38,12 @@ def get_room(room_id):
 @bp.route('/<room_id>/games', methods=['GET'])
 def get_room_games(room_id):
     """
-    방의 경기 목록 조회 (페이지네이션)
+    방의 경기 목록 조회 (페이지네이션, 날짜 필터링)
+    Query Parameters:
+    - page: 페이지 번호 (기본값: 1)
+    - limit: 페이지당 항목 수 (기본값: 10)
+    - from_date: 시작 날짜 (YYYY-MM-DD)
+    - to_date: 종료 날짜 (YYYY-MM-DD)
     """
     room = Room.query.filter_by(room_id=room_id).first()
 
@@ -49,9 +54,21 @@ def get_room_games(room_id):
     page = int(request.args.get('page', 1))
     limit = int(request.args.get('limit', 10))
 
-    # 경기 목록 조회
-    pagination = Game.query.filter_by(room_id=room_id)\
-        .order_by(Game.created_at.desc())\
+    # 날짜 필터링 파라미터
+    from_date = request.args.get('from_date')
+    to_date = request.args.get('to_date')
+
+    # 경기 목록 쿼리 시작
+    query = Game.query.filter_by(room_id=room_id)
+
+    # 날짜 필터링 적용
+    if from_date:
+        query = query.filter(Game.date >= from_date)
+    if to_date:
+        query = query.filter(Game.date <= to_date)
+
+    # 정렬 및 페이지네이션
+    pagination = query.order_by(Game.created_at.desc())\
         .paginate(page=page, per_page=limit, error_out=False)
 
     return jsonify({

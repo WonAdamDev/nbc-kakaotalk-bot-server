@@ -405,7 +405,9 @@ def player_arrival(game_id):
     선수 도착 처리
     Body: {
         "team": "블루" or "화이트",
-        "member": "선수 이름"
+        "member": "선수 이름",
+        "member_id": "MEM_X7Y2K9P3" (optional, 프리셋 멤버인 경우),
+        "team_id": "TEAM_X7Y2K9P3" (optional, 멤버의 팀 ID)
     }
     """
     game = Game.query.filter_by(game_id=game_id).first()
@@ -415,28 +417,49 @@ def player_arrival(game_id):
 
     data = request.get_json()
     team = data.get('team')
-    member = data.get('member')
+    member_name = data.get('member')
+    member_id = data.get('member_id')  # 프리셋 멤버면 존재
+    team_id = data.get('team_id')  # 멤버의 팀 ID
 
     if team not in ['블루', '화이트']:
         return jsonify({'success': False, 'error': 'team must be "블루" or "화이트"'}), 400
 
-    if not member:
+    if not member_name:
         return jsonify({'success': False, 'error': 'member is required'}), 400
 
-    # 중복 이름 체크 (경기 내 모든 팀에서)
-    existing_player = Lineup.query.filter_by(
-        game_id=game_id,
-        member=member,
-        arrived=True
-    ).first()
+    # 중복 체크: member_id가 있으면 member_id로, 없으면 이름으로
+    if member_id:
+        existing_player = Lineup.query.filter_by(
+            game_id=game_id,
+            member_id=member_id,
+            arrived=True
+        ).first()
+    else:
+        existing_player = Lineup.query.filter_by(
+            game_id=game_id,
+            member=member_name,
+            arrived=True
+        ).first()
 
     if existing_player:
+        error_msg = f'{member_name}'
+        if member_id:
+            error_msg += f' #{member_id[-4:]}'
+        error_msg += f'님은 이미 {existing_player.team} 팀에 출석했습니다.'
         return jsonify({
             'success': False,
-            'error': f'{member}님은 이미 {existing_player.team} 팀에 출석했습니다.'
+            'error': error_msg
         }), 400
 
     try:
+        # 게스트 여부 판단
+        is_guest = not bool(member_id)
+
+        # 게스트인 경우 임시 ID 발급
+        if is_guest:
+            import uuid
+            member_id = f"GUEST_{str(uuid.uuid4())[:8].upper()}"
+
         # 해당 팀의 다음 번호 계산
         last_lineup = Lineup.query.filter_by(
             game_id=game_id,
@@ -448,8 +471,11 @@ def player_arrival(game_id):
         # 라인업 추가
         lineup = Lineup(
             game_id=game_id,
+            member_id=member_id,
+            is_guest=is_guest,
+            team_id_snapshot=team_id,
             team=team,
-            member=member,
+            member=member_name,
             number=next_number,
             arrived=True,
             arrived_at=datetime.utcnow()

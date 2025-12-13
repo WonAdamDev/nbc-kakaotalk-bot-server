@@ -77,8 +77,17 @@ class Lineup(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     game_id = db.Column(db.String(8), db.ForeignKey('games.game_id', ondelete='CASCADE'), nullable=False)
+
+    # 선수 식별 (새로 추가)
+    member_id = db.Column(db.String(13), nullable=True)  # MEM_X7Y2K9P3 또는 GUEST_X7Y2K9P3
+    is_guest = db.Column(db.Boolean, default=False)
+
+    # 경기 당시 스냅샷 (새로 추가)
+    team_id_snapshot = db.Column(db.String(13), nullable=True)  # TEAM_X7Y2K9P3
+
+    # 기존 필드
     team = db.Column(db.String(10), nullable=False)  # 블루, 화이트
-    member = db.Column(db.String(50), nullable=False)
+    member = db.Column(db.String(50), nullable=False)  # 이름 (표시용)
     number = db.Column(db.Integer, nullable=False)
     arrived = db.Column(db.Boolean, default=True)
     arrived_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -93,6 +102,8 @@ class Lineup(db.Model):
         """딕셔너리 변환"""
         return {
             'id': self.id,
+            'member_id': self.member_id,
+            'is_guest': self.is_guest,
             'team': self.team,
             'member': self.member,
             'number': self.number,

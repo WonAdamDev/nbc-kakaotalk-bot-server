@@ -183,25 +183,9 @@ def member_post_command():
     request_member = data.get('member', 'unknown')
 
     try:
-        # MongoDB에서 중복 확인
+        # 동명이인 허용 - 중복 확인 없이 무조건 새로 생성
         mongo_db = cache_manager.mongo_db
         if mongo_db is not None:
-            existing_member = mongo_db['members'].find_one({
-                'room_name': request_room,
-                'name': request_member
-            })
-
-            if existing_member:
-                return jsonify({
-                    'success': True,
-                    'data': {
-                        'member': request_member,
-                        'member_id': existing_member.get('_id'),
-                        'team_id': existing_member.get('team_id'),
-                        'already_exists': True
-                    }
-                }), 200
-
             # 멤버 ID 발급
             member_id = generate_member_id()
 
@@ -215,10 +199,7 @@ def member_post_command():
             }
             mongo_db['members'].insert_one(member_doc)
 
-            # Redis 캐시에도 저장 (하위 호환성)
-            key = make_member_key(request_room, request_member)
-            cache_manager.set('members', key, request_member)
-
+            # Redis 캐시에는 저장하지 않음 (동명이인 문제로 인해 MongoDB만 사용)
             print(f"[MEMBER POST] Created member: {member_id} ({request_member})")
 
             return jsonify({
@@ -227,7 +208,7 @@ def member_post_command():
                     'member': request_member,
                     'member_id': member_id,
                     'team_id': None,
-                    'already_exists': False
+                    'created': True
                 }
             }), 200
         else:

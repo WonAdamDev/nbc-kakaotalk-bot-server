@@ -6,6 +6,7 @@ from datetime import datetime, date
 from app.models import db, Game, Lineup, Quarter, Room
 from app import socketio
 from app.utils import generate_guest_id
+from app.routes.admin.auth import require_admin
 import uuid
 
 bp = Blueprint('game', __name__, url_prefix='/api/game')
@@ -74,6 +75,7 @@ def get_frontend_url():
 
 
 @bp.route('/create', methods=['POST'])
+@require_admin
 def create_game():
     """
     경기 생성
@@ -490,6 +492,7 @@ def end_game(game_id):
 
 
 @bp.route('/<game_id>', methods=['DELETE'])
+@require_admin
 def delete_game(game_id):
     """
     경기 삭제 (CASCADE로 연관 데이터 모두 삭제)

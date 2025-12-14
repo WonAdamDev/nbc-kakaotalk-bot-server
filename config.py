@@ -9,6 +9,13 @@ class Config:
     HOST = os.environ.get('HOST', '0.0.0.0')
     PORT = int(os.environ.get('PORT', 5000))
 
+    # Admin Password
+    ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD') or 'admin123'
+
+    # JWT Settings
+    JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY') or 'jwt-secret-key-please-change-in-production'
+    JWT_ACCESS_TOKEN_EXPIRES = int(os.environ.get('JWT_ACCESS_TOKEN_EXPIRES', 604800))  # 기본값: 7일 (초 단위)
+
     # Frontend URL
     FRONTEND_URL = os.environ.get('FRONTEND_URL') or 'http://localhost:3000'
 

@@ -1,5 +1,6 @@
 from flask import Blueprint, request, jsonify
 from app import cache_manager
+from app.routes.admin.auth import require_admin
 
 bp = Blueprint('member_team_commands', __name__, url_prefix='/api/commands/member_team')
 
@@ -55,6 +56,7 @@ def member_team_get_command():
         }), 500
 
 @bp.route('/', methods=['POST'])
+@require_admin
 def member_team_post_command():
     """멤버를 팀에 배정"""
     if not cache_manager:
@@ -249,6 +251,7 @@ def member_team_post_command():
         }), 500
 
 @bp.route('/', methods=['DELETE'])
+@require_admin
 def member_team_delete_command():
     """멤버의 팀 배정 해제"""
     if not cache_manager:

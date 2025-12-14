@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify
 from app import cache_manager
 from app.utils import generate_member_id
+from app.routes.admin.auth import require_admin
 from datetime import datetime
 import re
 
@@ -167,6 +168,7 @@ def member_get_command():
         }), 500
     
 @bp.route('/', methods=['POST'])
+@require_admin
 def member_post_command():
     if not cache_manager:
         return jsonify({
@@ -247,6 +249,7 @@ def member_post_command():
         }), 500
     
 @bp.route('/', methods=['DELETE'])
+@require_admin
 def member_delete_command():
     if not cache_manager:
         return jsonify({

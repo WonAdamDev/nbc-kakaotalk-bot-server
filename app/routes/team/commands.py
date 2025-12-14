@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify
 from app import cache_manager
 from app.utils import generate_team_id
+from app.routes.admin.auth import require_admin
 from datetime import datetime
 import re
 
@@ -94,8 +95,9 @@ def team_get_command():
             'success': False,
             'message': f'오류가 발생했습니다: {str(e)}'
         }), 500
-    
+
 @bp.route('/', methods=['POST'])
+@require_admin
 def team_post_command():
     if not cache_manager:
         return jsonify({
@@ -185,8 +187,9 @@ def team_post_command():
             'success': False,
             'message': f'오류가 발생했습니다: {str(e)}'
         }), 500
-    
+
 @bp.route('/', methods=['DELETE'])
+@require_admin
 def team_delete_command():
     if not cache_manager:
         return jsonify({

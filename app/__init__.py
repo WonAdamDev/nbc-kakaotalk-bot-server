@@ -42,11 +42,43 @@ def create_app(config_class=Config):
 
     # 3. CORS 설정
     CORS(app,
-         resources={r"/*": {"origins": cors_origins}},
-         supports_credentials=True,
-         allow_headers=['Content-Type', 'Authorization'],
-         methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
+         resources={r"/*": {
+             "origins": cors_origins,
+             "methods": ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+             "allow_headers": ['Content-Type', 'Authorization'],
+             "expose_headers": ['Content-Type', 'Authorization'],
+             "supports_credentials": True,
+             "max_age": 3600,
+             "send_wildcard": False,
+             "always_send": True
+         }}
     )
+
+    # OPTIONS 요청 직접 처리 (Railway HTTPS redirect 우회)
+    @app.before_request
+    def handle_preflight():
+        if request.method == 'OPTIONS':
+            origin = request.headers.get('Origin', '')
+            print(f"[CORS] Preflight request from: {origin}")
+            print(f"[CORS] Allowed origins: {cors_origins}")
+            print(f"[CORS] Path: {request.path}")
+
+            # Origin이 허용 목록에 있는지 확인
+            if origin in cors_origins:
+                print(f"[CORS] Origin allowed, sending preflight response")
+                response = app.make_response('')
+                response.status_code = 200
+                response.headers['Access-Control-Allow-Origin'] = origin
+                response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+                response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+                response.headers['Access-Control-Max-Age'] = '3600'
+                response.headers['Access-Control-Allow-Credentials'] = 'true'
+                response.headers['Content-Length'] = '0'
+                return response
+
+            # 허용되지 않은 origin이면 기본 처리
+            print(f"[CORS] Origin not allowed")
+            return app.make_default_options_response()
 
     # PostgreSQL 초기화 (경기 데이터)
     db.init_app(app)

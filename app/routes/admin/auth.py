@@ -33,10 +33,6 @@ def require_admin(f):
     """관리자 인증 데코레이터"""
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        # OPTIONS 요청은 인증 없이 통과 (CORS preflight)
-        if request.method == 'OPTIONS':
-            return f(*args, **kwargs)
-
         # Authorization 헤더에서 토큰 추출
         auth_header = request.headers.get('Authorization')
 

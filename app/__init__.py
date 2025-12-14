@@ -44,7 +44,8 @@ def create_app(config_class=Config):
     CORS(app,
          resources={r"/*": {"origins": cors_origins}},
          supports_credentials=True,
-         allow_headers=['Content-Type', 'Authorization']
+         allow_headers=['Content-Type', 'Authorization'],
+         methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
     )
 
     # PostgreSQL 초기화 (경기 데이터)

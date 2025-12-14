@@ -1,4 +1,4 @@
-from flask import Flask
+from flask import Flask, request, redirect
 from flask_cors import CORS
 from flask_socketio import SocketIO
 from redis import Redis
@@ -19,6 +19,9 @@ socketio = SocketIO()
 def create_app(config_class=Config):
     app = Flask(__name__)
     app.config.from_object(config_class)
+
+    # Trailing slash 처리 (Railway HTTPS 리다이렉트 문제 방지)
+    app.url_map.strict_slashes = False
 
     # CORS 설정 (프론트엔드 URL 허용)
     # 1. 기본 허용 도메인 (로컬 개발 + 프로덕션)
@@ -53,6 +56,20 @@ def create_app(config_class=Config):
              "always_send": True
          }}
     )
+
+    # HTTPS 강제 (Railway 프로덕션 환경)
+    @app.before_request
+    def force_https():
+        # Railway에서 X-Forwarded-Proto 헤더로 프로토콜 확인
+        if request.headers.get('X-Forwarded-Proto') == 'http':
+            # OPTIONS 요청은 리다이렉트하지 않음 (CORS preflight 문제)
+            if request.method == 'OPTIONS':
+                return None
+
+            # HTTP로 들어온 요청을 HTTPS로 리다이렉트
+            url = request.url.replace('http://', 'https://', 1)
+            print(f"[HTTPS] Redirecting {request.url} -> {url}")
+            return redirect(url, code=301)
 
     # OPTIONS 요청 직접 처리 (Railway HTTPS redirect 우회)
     @app.before_request

@@ -20,20 +20,55 @@ def member_team_get_command():
     # GET 요청: 쿼리 스트링에서 파라미터 읽기
     request_room = request.args.get('room', 'unknown')
     request_member = request.args.get('member', 'unknown')
+    request_member_id = request.args.get('member_id')  # 선택적 파라미터
 
-    print(f"[MEMBER_TEAM GET] Query params: room={request_room}, member={request_member}")
+    print(f"[MEMBER_TEAM GET] Query params: room={request_room}, member={request_member}, member_id={request_member_id}")
 
     try:
         # MongoDB에서 먼저 조회
         mongo_db = cache_manager.mongo_db
         if mongo_db is not None:
-            # MongoDB에서 멤버 찾기
-            member_doc = mongo_db['members'].find_one({
+            # member_id가 제공된 경우 ID로 직접 조회
+            if request_member_id:
+                member_doc = mongo_db['members'].find_one({
+                    '_id': request_member_id,
+                    'room_name': request_room
+                })
+
+                if member_doc:
+                    team_id = member_doc.get('team_id')
+                    team_name = None
+                    if team_id:
+                        team_doc = mongo_db['teams'].find_one({'_id': team_id})
+                        if team_doc:
+                            team_name = team_doc.get('name')
+
+                    return jsonify({
+                        'success': True,
+                        'data': {
+                            'member': member_doc.get('name'),
+                            'member_id': member_doc.get('_id'),
+                            'team': team_name,
+                            'is_member': True,
+                            'is_unique': True
+                        }
+                    }), 200
+                else:
+                    return jsonify({
+                        'success': False,
+                        'data': {
+                            'member': request_member,
+                            'is_member': False
+                        }
+                    }), 404
+
+            # 이름으로 조회 (동명이인 체크)
+            member_docs = list(mongo_db['members'].find({
                 'room_name': request_room,
                 'name': request_member
-            })
+            }))
 
-            if not member_doc:
+            if len(member_docs) == 0:
                 return jsonify({
                     'success': False,
                     'data': {
@@ -41,24 +76,52 @@ def member_team_get_command():
                         'is_member': False
                     }
                 }), 404
+            elif len(member_docs) == 1:
+                # 동명이인 없음
+                member_doc = member_docs[0]
+                team_id = member_doc.get('team_id')
+                team_name = None
+                if team_id:
+                    team_doc = mongo_db['teams'].find_one({'_id': team_id})
+                    if team_doc:
+                        team_name = team_doc.get('name')
 
-            # 팀 배정 조회
-            team_id = member_doc.get('team_id')
-            team_name = None
-            if team_id:
-                team_doc = mongo_db['teams'].find_one({'_id': team_id})
-                if team_doc:
-                    team_name = team_doc.get('name')
+                return jsonify({
+                    'success': True,
+                    'data': {
+                        'member': request_member,
+                        'member_id': member_doc.get('_id'),
+                        'team': team_name,
+                        'is_member': True,
+                        'is_unique': True
+                    }
+                }), 200
+            else:
+                # 동명이인 있음
+                duplicates = []
+                for doc in member_docs:
+                    team_id = doc.get('team_id')
+                    team_name = None
+                    if team_id:
+                        team_doc = mongo_db['teams'].find_one({'_id': team_id})
+                        if team_doc:
+                            team_name = team_doc.get('name')
 
-            return jsonify({
-                'success': True,
-                'data': {
-                    'member': request_member,
-                    'member_id': member_doc.get('_id'),
-                    'team': team_name,
-                    'is_member': True
-                }
-            }), 200
+                    duplicates.append({
+                        'member_id': doc.get('_id'),
+                        'team': team_name
+                    })
+
+                return jsonify({
+                    'success': True,
+                    'data': {
+                        'member': request_member,
+                        'is_member': True,
+                        'is_unique': False,
+                        'duplicates': duplicates,
+                        'count': len(duplicates)
+                    }
+                }), 200
         else:
             # MongoDB 없으면 기존 Redis 방식 사용
             member_key = make_member_key(request_room, request_member)

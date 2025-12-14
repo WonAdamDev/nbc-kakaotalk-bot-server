@@ -68,8 +68,6 @@ def member_team_get_command():
                 'name': request_member
             }))
 
-            print(f"[MEMBER_TEAM GET] Found {len(member_docs)} members with name '{request_member}'")
-
             if len(member_docs) == 0:
                 return jsonify({
                     'success': False,
@@ -100,7 +98,6 @@ def member_team_get_command():
                 }), 200
             else:
                 # 동명이인 있음
-                print(f"[MEMBER_TEAM GET] Multiple members found, building duplicates list")
                 duplicates = []
                 for doc in member_docs:
                     team_id = doc.get('team_id')
@@ -114,9 +111,7 @@ def member_team_get_command():
                         'member_id': doc.get('_id'),
                         'team': team_name
                     })
-                    print(f"[MEMBER_TEAM GET] Added duplicate: id={doc.get('_id')}, team={team_name}")
 
-                print(f"[MEMBER_TEAM GET] Returning {len(duplicates)} duplicates")
                 return jsonify({
                     'success': True,
                     'data': {

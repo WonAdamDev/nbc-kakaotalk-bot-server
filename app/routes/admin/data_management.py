@@ -5,11 +5,13 @@ from flask import Blueprint, request, jsonify, send_file, current_app
 from app.routes.admin.auth import require_admin
 from app import cache_manager, redis_client
 from app.utils import generate_member_id, generate_team_id
+from app.models import db, Room
 from datetime import datetime
 import pandas as pd
 import io
 import time
 import logging
+import uuid
 
 bp = Blueprint('data_management', __name__, url_prefix='/api/admin/data')
 
@@ -17,6 +19,11 @@ logger = logging.getLogger(__name__)
 
 # 파일 크기 제한 (10MB)
 MAX_FILE_SIZE = 10 * 1024 * 1024
+
+
+def generate_room_id():
+    """8자리 고유 방 ID 생성"""
+    return str(uuid.uuid4())[:8].upper()
 
 
 def validate_excel_file(file):
@@ -167,6 +174,8 @@ def import_data():
         stats = {
             'mode': 'replace_all' if replace_all else 'append',
             'total_rows': len(df),
+            'rooms_created': 0,
+            'rooms_skipped': 0,
             'teams_created': 0,
             'teams_skipped': 0,
             'members_created': 0,
@@ -176,7 +185,7 @@ def import_data():
 
         # Replace All 모드 처리
         if replace_all:
-            logger.warning("[IMPORT] REPLACE_ALL mode - Deleting all members and teams")
+            logger.warning("[IMPORT] REPLACE_ALL mode - Deleting all rooms, members and teams")
 
             # MongoDB 전체 삭제
             deleted_members = mongo_db['members'].delete_many({})
@@ -185,8 +194,18 @@ def import_data():
             stats['deleted_members'] = deleted_members.deleted_count
             stats['deleted_teams'] = deleted_teams.deleted_count
 
+            # PostgreSQL rooms 테이블 삭제
+            try:
+                deleted_rooms = db.session.query(Room).delete()
+                db.session.commit()
+                stats['deleted_rooms'] = deleted_rooms
+                logger.info(f"[IMPORT] Deleted {deleted_rooms} rooms from PostgreSQL")
+            except Exception as e:
+                db.session.rollback()
+                logger.error(f"[IMPORT] PostgreSQL rooms delete error: {str(e)}")
+
             # Redis 캐시 삭제 (members, teams 관련)
-            if redis_client:
+            if redis_client is not None:
                 try:
                     # 패턴 기반 삭제
                     for pattern in ['members:*', 'teams:*']:
@@ -196,6 +215,36 @@ def import_data():
                     logger.info(f"[IMPORT] Redis cache cleared for members/teams")
                 except Exception as e:
                     logger.error(f"[IMPORT] Redis clear error: {str(e)}")
+
+        # Room 처리 (PostgreSQL)
+        unique_rooms = df['room'].unique()
+        for room_name in unique_rooms:
+            # 기존 room 확인
+            existing_room = Room.query.filter_by(name=room_name).first()
+            if existing_room:
+                stats['rooms_skipped'] += 1
+                logger.info(f"[IMPORT] Room exists: {room_name}, skipping")
+            else:
+                # 새 room 생성
+                room_id = generate_room_id()
+                while Room.query.filter_by(room_id=room_id).first():
+                    room_id = generate_room_id()
+
+                new_room = Room(room_id=room_id, name=room_name)
+                db.session.add(new_room)
+                stats['rooms_created'] += 1
+                logger.info(f"[IMPORT] Created room: {room_name} (ID: {room_id})")
+
+        # PostgreSQL 커밋
+        try:
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"[IMPORT] Room creation failed: {str(e)}")
+            return jsonify({
+                'success': False,
+                'message': f'Room 생성 실패: {str(e)}'
+            }), 500
 
         # 팀 처리 (중복 제거)
         teams_to_create = {}  # key: (room, team_name), value: team_id
@@ -307,7 +356,7 @@ def import_data():
         stats['processing_time_ms'] = processing_time
 
         # Redis 캐시 새로고침 (MongoDB → Redis)
-        if cache_manager and redis_client:
+        if cache_manager is not None and redis_client is not None:
             try:
                 logger.info("[IMPORT] Reloading cache from MongoDB to Redis...")
                 cache_manager.load_all_to_cache()

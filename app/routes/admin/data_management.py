@@ -247,10 +247,6 @@ def import_data():
                 teams_to_create[(room, team_name)] = new_team_id
                 stats['teams_created'] += 1
 
-                # Redis 캐시 업데이트
-                if redis_client:
-                    cache_manager.set('teams', f"room:{room}:team:{team_name}", team_name)
-
         # 멤버 처리
         for index, row in df.iterrows():
             try:
@@ -299,12 +295,6 @@ def import_data():
                 })
                 stats['members_created'] += 1
 
-                # Redis 캐시 업데이트
-                if redis_client:
-                    cache_manager.set('members', f"room:{room}:member:{member_name}", member_name)
-                    if team_id:
-                        cache_manager.set('member_teams', f"room:{room}:member:{member_name}", team_name)
-
             except Exception as e:
                 logger.error(f"[IMPORT] Error processing row {index + 2}: {str(e)}")
                 stats['errors'].append({
@@ -315,6 +305,14 @@ def import_data():
         # 처리 시간 계산
         processing_time = int((time.time() - start_time) * 1000)
         stats['processing_time_ms'] = processing_time
+
+        # Redis 캐시 새로고침 (MongoDB → Redis)
+        if cache_manager and redis_client:
+            try:
+                logger.info("[IMPORT] Reloading cache from MongoDB to Redis...")
+                cache_manager.load_all_to_cache()
+            except Exception as e:
+                logger.warning(f"[IMPORT] Cache reload failed: {str(e)}")
 
         logger.info(f"[IMPORT] Completed: {stats}")
 

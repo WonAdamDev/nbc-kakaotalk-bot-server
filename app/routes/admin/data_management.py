@@ -96,14 +96,14 @@ def import_data():
 
     try:
         # cache_manager 확인
-        if not cache_manager:
+        if cache_manager is None:
             return jsonify({
                 'success': False,
                 'message': '캐시 시스템을 사용할 수 없습니다.'
             }), 500
 
         mongo_db = cache_manager.mongo_db
-        if not mongo_db:
+        if mongo_db is None:
             return jsonify({
                 'success': False,
                 'message': 'MongoDB를 사용할 수 없습니다.'
@@ -339,14 +339,14 @@ def export_data():
     """
     try:
         # cache_manager 확인
-        if not cache_manager:
+        if cache_manager is None:
             return jsonify({
                 'success': False,
                 'message': '캐시 시스템을 사용할 수 없습니다.'
             }), 500
 
         mongo_db = cache_manager.mongo_db
-        if not mongo_db:
+        if mongo_db is None:
             return jsonify({
                 'success': False,
                 'message': 'MongoDB를 사용할 수 없습니다.'

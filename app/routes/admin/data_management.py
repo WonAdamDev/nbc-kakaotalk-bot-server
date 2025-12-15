@@ -354,7 +354,7 @@ def export_data():
 
         # 팀 데이터 조회 (ID -> 이름 매핑)
         teams_cursor = mongo_db['teams'].find({})
-        teams_dict = {team['_id']: team['name'] for team in teams_cursor}
+        teams_dict = {team['_id']: team.get('name', '') for team in teams_cursor}
 
         # 멤버 데이터 조회
         members_cursor = mongo_db['members'].find({})

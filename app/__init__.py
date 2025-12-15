@@ -180,6 +180,7 @@ def create_app(config_class=Config):
     from app.routes.member_team import commands as member_team_commands
     from app.routes.game import commands as game_commands
     from app.routes.admin import commands as admin_commands
+    from app.routes.admin import data_management
     from app.routes import room_routes
 
     app.register_blueprint(commands.bp)
@@ -188,6 +189,7 @@ def create_app(config_class=Config):
     app.register_blueprint(member_team_commands.bp)
     app.register_blueprint(game_commands.bp)
     app.register_blueprint(admin_commands.bp)
+    app.register_blueprint(data_management.bp)
     app.register_blueprint(room_routes.bp)
 
     # WebSocket 이벤트 핸들러 등록

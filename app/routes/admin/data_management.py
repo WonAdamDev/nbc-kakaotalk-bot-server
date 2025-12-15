@@ -1,0 +1,409 @@
+"""
+Admin 데이터 관리 API - Import/Export
+"""
+from flask import Blueprint, request, jsonify, send_file, current_app
+from app.routes.admin.auth import require_admin
+from app import cache_manager, redis_client
+from app.utils import generate_member_id, generate_team_id
+from datetime import datetime
+import pandas as pd
+import io
+import time
+import logging
+
+bp = Blueprint('data_management', __name__, url_prefix='/api/admin/data')
+
+logger = logging.getLogger(__name__)
+
+# 파일 크기 제한 (10MB)
+MAX_FILE_SIZE = 10 * 1024 * 1024
+
+
+def validate_excel_file(file):
+    """Excel 파일 검증"""
+    if not file:
+        return False, "파일을 선택해주세요"
+
+    # 파일 확장자 체크
+    filename = file.filename
+    if not filename.endswith(('.xlsx', '.xls')):
+        return False, ".xlsx 또는 .xls 파일만 지원됩니다"
+
+    # 파일 크기 체크 (메모리에서)
+    file.seek(0, 2)  # 끝으로 이동
+    file_size = file.tell()
+    file.seek(0)  # 다시 처음으로
+
+    if file_size > MAX_FILE_SIZE:
+        return False, "파일 크기는 10MB 이하여야 합니다"
+
+    return True, None
+
+
+def validate_dataframe(df):
+    """DataFrame 데이터 검증"""
+    errors = []
+
+    # 필수 컬럼 체크
+    required_cols = ['room', 'member', 'team']
+    missing_cols = [col for col in required_cols if col not in df.columns]
+    if missing_cols:
+        return False, f"필수 컬럼 누락: {', '.join(missing_cols)}"
+
+    # 행별 검증
+    for index, row in df.iterrows():
+        row_num = index + 2  # Excel 행 번호 (헤더 + 0-index)
+        row_errors = []
+
+        # room 필수
+        if pd.isna(row['room']) or str(row['room']).strip() == '':
+            row_errors.append("room은 필수입니다")
+
+        # member 필수
+        if pd.isna(row['member']) or str(row['member']).strip() == '':
+            row_errors.append("member는 필수입니다")
+
+        # ID 형식 검증 (있는 경우에만)
+        if 'team_id' in df.columns and not pd.isna(row.get('team_id')):
+            team_id = str(row['team_id']).strip()
+            if team_id and not team_id.startswith('TEAM_'):
+                row_errors.append(f"잘못된 team_id 형식: {team_id}")
+
+        if 'member_id' in df.columns and not pd.isna(row.get('member_id')):
+            member_id = str(row['member_id']).strip()
+            if member_id and not member_id.startswith('MEM_'):
+                row_errors.append(f"잘못된 member_id 형식: {member_id}")
+
+        if row_errors:
+            errors.append({
+                'row': row_num,
+                'error': ', '.join(row_errors)
+            })
+
+    if errors:
+        return False, errors
+
+    return True, None
+
+
+@bp.route('/import', methods=['POST'])
+@require_admin
+def import_data():
+    """
+    Excel 파일로 멤버/팀 데이터 Import
+    """
+    start_time = time.time()
+
+    try:
+        # cache_manager 확인
+        if not cache_manager:
+            return jsonify({
+                'success': False,
+                'message': '캐시 시스템을 사용할 수 없습니다.'
+            }), 500
+
+        mongo_db = cache_manager.mongo_db
+        if not mongo_db:
+            return jsonify({
+                'success': False,
+                'message': 'MongoDB를 사용할 수 없습니다.'
+            }), 500
+
+        # replace_all 파라미터 확인
+        replace_all = request.form.get('replace_all', 'false').lower() == 'true'
+
+        # 파일 가져오기
+        if 'file' not in request.files:
+            return jsonify({
+                'success': False,
+                'message': '파일이 없습니다.'
+            }), 400
+
+        file = request.files['file']
+
+        # 파일 검증
+        is_valid, error_msg = validate_excel_file(file)
+        if not is_valid:
+            return jsonify({
+                'success': False,
+                'message': error_msg
+            }), 400
+
+        # Excel 파싱
+        try:
+            df = pd.read_excel(file, engine='openpyxl')
+        except Exception as e:
+            logger.error(f"[IMPORT] Excel parsing error: {str(e)}")
+            return jsonify({
+                'success': False,
+                'message': f'Excel 파일을 읽을 수 없습니다: {str(e)}'
+            }), 400
+
+        # 데이터 검증
+        is_valid, validation_errors = validate_dataframe(df)
+        if not is_valid:
+            return jsonify({
+                'success': False,
+                'message': '데이터 검증 실패',
+                'data': {
+                    'errors': validation_errors
+                }
+            }), 400
+
+        # 데이터 정제
+        df['room'] = df['room'].astype(str).str.strip()
+        df['member'] = df['member'].astype(str).str.strip()
+        df['team'] = df['team'].fillna('').astype(str).str.strip()
+        if 'team_id' in df.columns:
+            df['team_id'] = df['team_id'].fillna('').astype(str).str.strip()
+        else:
+            df['team_id'] = ''
+        if 'member_id' in df.columns:
+            df['member_id'] = df['member_id'].fillna('').astype(str).str.strip()
+        else:
+            df['member_id'] = ''
+
+        # 통계 초기화
+        stats = {
+            'mode': 'replace_all' if replace_all else 'append',
+            'total_rows': len(df),
+            'teams_created': 0,
+            'teams_skipped': 0,
+            'members_created': 0,
+            'members_skipped': 0,
+            'errors': []
+        }
+
+        # Replace All 모드 처리
+        if replace_all:
+            logger.warning("[IMPORT] REPLACE_ALL mode - Deleting all members and teams")
+
+            # MongoDB 전체 삭제
+            deleted_members = mongo_db['members'].delete_many({})
+            deleted_teams = mongo_db['teams'].delete_many({})
+
+            stats['deleted_members'] = deleted_members.deleted_count
+            stats['deleted_teams'] = deleted_teams.deleted_count
+
+            # Redis 캐시 삭제 (members, teams, member_teams 관련)
+            if redis_client:
+                try:
+                    # 패턴 기반 삭제
+                    for pattern in ['members:*', 'teams:*', 'member_teams:*']:
+                        keys = redis_client.keys(pattern)
+                        if keys:
+                            redis_client.delete(*keys)
+                    logger.info(f"[IMPORT] Redis cache cleared for members/teams")
+                except Exception as e:
+                    logger.error(f"[IMPORT] Redis clear error: {str(e)}")
+
+        # 팀 처리 (중복 제거)
+        teams_to_create = {}  # key: (room, team_name), value: team_id
+
+        for _, row in df.iterrows():
+            if not row['team']:  # 팀이 없으면 스킵
+                continue
+
+            room = row['room']
+            team_name = row['team']
+            team_id_from_excel = row['team_id']
+
+            # 이미 처리한 팀이면 스킵
+            if (room, team_name) in teams_to_create:
+                continue
+
+            # team_id가 지정되어 있으면 DB 확인
+            if team_id_from_excel:
+                existing_team = mongo_db['teams'].find_one({'_id': team_id_from_excel})
+                if existing_team:
+                    # 기존 팀 사용
+                    teams_to_create[(room, team_name)] = team_id_from_excel
+                    stats['teams_skipped'] += 1
+                    logger.info(f"[IMPORT] Team exists with ID: {team_id_from_excel}, skipping")
+                    continue
+                else:
+                    # DB에 없으므로 새 ID 발급
+                    logger.warning(f"[IMPORT] team_id {team_id_from_excel} not found, creating with new ID")
+
+            # team_id 미지정 또는 DB에 없음 - room+name으로 확인
+            existing_team_by_name = mongo_db['teams'].find_one({
+                'room_name': room,
+                'name': team_name
+            })
+
+            if existing_team_by_name:
+                # 기존 팀 사용
+                teams_to_create[(room, team_name)] = existing_team_by_name['_id']
+                stats['teams_skipped'] += 1
+            else:
+                # 새 팀 생성
+                new_team_id = generate_team_id()
+                mongo_db['teams'].insert_one({
+                    '_id': new_team_id,
+                    'room_name': room,
+                    'name': team_name,
+                    'created_at': datetime.utcnow()
+                })
+                teams_to_create[(room, team_name)] = new_team_id
+                stats['teams_created'] += 1
+
+                # Redis 캐시 업데이트
+                if redis_client:
+                    cache_manager.set('teams', f"room:{room}:team:{team_name}", team_name)
+
+        # 멤버 처리
+        for index, row in df.iterrows():
+            try:
+                room = row['room']
+                member_name = row['member']
+                team_name = row['team']
+                member_id_from_excel = row['member_id']
+
+                # member_id가 지정되어 있으면 DB 확인
+                if member_id_from_excel:
+                    existing_member = mongo_db['members'].find_one({'_id': member_id_from_excel})
+                    if existing_member:
+                        # 기존 멤버 사용 (스킵)
+                        stats['members_skipped'] += 1
+                        logger.info(f"[IMPORT] Member exists with ID: {member_id_from_excel}, skipping")
+                        continue
+                    else:
+                        # DB에 없으므로 새 ID 발급
+                        logger.warning(f"[IMPORT] member_id {member_id_from_excel} not found, creating with new ID")
+
+                # member_id 미지정 또는 DB에 없음 - room+name으로 확인
+                existing_member_by_name = mongo_db['members'].find_one({
+                    'room_name': room,
+                    'name': member_name
+                })
+
+                if existing_member_by_name:
+                    # 기존 멤버 사용 (스킵)
+                    stats['members_skipped'] += 1
+                    continue
+
+                # 새 멤버 생성
+                new_member_id = generate_member_id()
+
+                # 팀 배정
+                team_id = None
+                if team_name and (room, team_name) in teams_to_create:
+                    team_id = teams_to_create[(room, team_name)]
+
+                mongo_db['members'].insert_one({
+                    '_id': new_member_id,
+                    'room_name': room,
+                    'name': member_name,
+                    'team_id': team_id,
+                    'created_at': datetime.utcnow()
+                })
+                stats['members_created'] += 1
+
+                # Redis 캐시 업데이트
+                if redis_client:
+                    cache_manager.set('members', f"room:{room}:member:{member_name}", member_name)
+                    if team_id:
+                        cache_manager.set('member_teams', f"room:{room}:member:{member_name}", team_name)
+
+            except Exception as e:
+                logger.error(f"[IMPORT] Error processing row {index + 2}: {str(e)}")
+                stats['errors'].append({
+                    'row': index + 2,
+                    'error': str(e)
+                })
+
+        # 처리 시간 계산
+        processing_time = int((time.time() - start_time) * 1000)
+        stats['processing_time_ms'] = processing_time
+
+        logger.info(f"[IMPORT] Completed: {stats}")
+
+        return jsonify({
+            'success': True,
+            'data': stats
+        }), 200
+
+    except Exception as e:
+        logger.error(f"[IMPORT] Unexpected error: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f'처리 중 오류가 발생했습니다: {str(e)}'
+        }), 500
+
+
+@bp.route('/export', methods=['GET'])
+@require_admin
+def export_data():
+    """
+    전체 멤버/팀 데이터를 Excel로 Export
+    """
+    try:
+        # cache_manager 확인
+        if not cache_manager:
+            return jsonify({
+                'success': False,
+                'message': '캐시 시스템을 사용할 수 없습니다.'
+            }), 500
+
+        mongo_db = cache_manager.mongo_db
+        if not mongo_db:
+            return jsonify({
+                'success': False,
+                'message': 'MongoDB를 사용할 수 없습니다.'
+            }), 500
+
+        # 팀 데이터 조회 (ID -> 이름 매핑)
+        teams_cursor = mongo_db['teams'].find({})
+        teams_dict = {team['_id']: team['name'] for team in teams_cursor}
+
+        # 멤버 데이터 조회
+        members_cursor = mongo_db['members'].find({})
+
+        # Export 데이터 구조화
+        export_data = []
+        for member in members_cursor:
+            team_id = member.get('team_id')
+            team_name = teams_dict.get(team_id, '') if team_id else ''
+
+            export_data.append({
+                'room': member.get('room_name', ''),
+                'member': member.get('name', ''),
+                'member_id': member.get('_id', ''),
+                'team': team_name,
+                'team_id': team_id or ''
+            })
+
+        # DataFrame 생성 및 정렬
+        df = pd.DataFrame(export_data)
+        if len(df) > 0:
+            df = df.sort_values(['room', 'member'])
+
+        # 컬럼 순서 지정
+        df = df[['room', 'member', 'team', 'team_id', 'member_id']]
+
+        # Excel 파일 생성 (메모리에서)
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df.to_excel(writer, sheet_name='Members', index=False)
+        output.seek(0)
+
+        # 파일명 생성
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        filename = f'nbc_members_teams_{timestamp}.xlsx'
+
+        logger.info(f"[EXPORT] Exported {len(df)} members to {filename}")
+
+        # 파일 전송
+        return send_file(
+            output,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True,
+            download_name=filename
+        )
+
+    except Exception as e:
+        logger.error(f"[EXPORT] Error: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': f'Export 중 오류가 발생했습니다: {str(e)}'
+        }), 500

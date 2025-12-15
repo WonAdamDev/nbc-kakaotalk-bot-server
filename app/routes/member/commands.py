@@ -317,11 +317,6 @@ def member_delete_command():
             })
 
             if result.deleted_count > 0:
-                # Redis 캐시에서도 삭제
-                member_key = make_member_key(request_room, request_member)
-                cache_manager.delete('members', member_key)
-                cache_manager.delete('member_teams', member_key)
-
                 return jsonify({
                     'success': True,
                     'data': {
@@ -339,7 +334,6 @@ def member_delete_command():
             # MongoDB 없으면 기존 방식
             member_key = make_member_key(request_room, request_member)
             cache_manager.delete('members', member_key)
-            cache_manager.delete('member_teams', member_key)
             return jsonify({
                 'success': True,
                 'data': {

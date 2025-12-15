@@ -52,7 +52,7 @@ def team_get_command():
             team_found = bool(team)
 
         if team_found:
-            # 팀에 속한 멤버들 조회 (MongoDB 우선)
+            # 팀에 속한 멤버들 조회 (MongoDB만 지원)
             members = []
             if mongo_db is not None:
                 member_docs = mongo_db['members'].find({
@@ -64,12 +64,6 @@ def team_get_command():
                         'name': doc.get('name'),
                         'member_id': doc.get('_id')
                     })
-            else:
-                # fallback: Redis
-                member_keys = cache_manager.find_keys_by_value('member_teams', query_team)
-                for key in member_keys:
-                    member_name = key.split(':')[-1]
-                    members.append({'name': member_name})
 
             return jsonify({
                 'success': True,
@@ -204,44 +198,72 @@ def team_delete_command():
     request_team = data.get('team', 'unknown')
 
     try:
-        team_key = make_team_key(request_room, request_team)
-        team = cache_manager.get('teams', team_key)
+        mongo_db = cache_manager.mongo_db
+        if mongo_db is not None:
+            # MongoDB에서 팀 확인
+            team_doc = mongo_db['teams'].find_one({
+                'room_name': request_room,
+                'name': request_team
+            })
 
-        if not team:
+            if not team_doc:
+                return jsonify({
+                    'success': False,
+                    'data': {
+                        'team': request_team,
+                        'deleted': False,
+                        'reason': 'not_found'
+                    }
+                }), 404
+
+            team_id = team_doc.get('_id')
+
+            # 팀에 배정된 멤버가 있는지 확인
+            member_count = mongo_db['members'].count_documents({
+                'room_name': request_room,
+                'team_id': team_id
+            })
+
+            if member_count > 0:
+                # 멤버가 있으면 삭제 거부
+                return jsonify({
+                    'success': False,
+                    'data': {
+                        'team': request_team,
+                        'deleted': False,
+                        'reason': 'has_members',
+                        'member_count': member_count
+                    }
+                }), 400
+
+            # 멤버가 없으면 팀 삭제
+            mongo_db['teams'].delete_one({'_id': team_id})
+
             return jsonify({
-                'success': False,
+                'success': True,
                 'data': {
                     'team': request_team,
-                    'deleted': False,
-                    'reason': 'not_found'
+                    'team_id': team_id,
+                    'deleted': True
                 }
-            }), 404
-
-        # 팀에 배정된 멤버가 있는지 확인
-        member_keys = cache_manager.find_keys_by_value('member_teams', request_team)
-
-        if member_keys:
-            # 멤버가 있으면 삭제 거부
-            member_count = len(member_keys)
-            return jsonify({
-                'success': False,
-                'data': {
-                    'team': request_team,
-                    'deleted': False,
-                    'reason': 'has_members',
-                    'member_count': member_count
-                }
-            }), 400
+            }), 200
         else:
+            # MongoDB 없으면 기존 Redis 방식
+            team_key = make_team_key(request_room, request_team)
+            team = cache_manager.get('teams', team_key)
+
+            if not team:
+                return jsonify({
+                    'success': False,
+                    'data': {
+                        'team': request_team,
+                        'deleted': False,
+                        'reason': 'not_found'
+                    }
+                }), 404
+
             # 멤버가 없으면 팀 삭제
             cache_manager.delete('teams', team_key)
-
-            # 안전을 위해 혹시 남아있을 수 있는 member_teams 정리
-            # (고아 데이터 방지)
-            member_keys_cleanup = cache_manager.find_keys_by_value('member_teams', request_team)
-            for member_key in member_keys_cleanup:
-                cache_manager.delete('member_teams', member_key)
-                print(f"[TEAM DELETE] Cleaned up orphaned member_team: {member_key}")
 
             return jsonify({
                 'success': True,

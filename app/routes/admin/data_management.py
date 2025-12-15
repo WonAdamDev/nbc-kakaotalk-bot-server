@@ -185,11 +185,11 @@ def import_data():
             stats['deleted_members'] = deleted_members.deleted_count
             stats['deleted_teams'] = deleted_teams.deleted_count
 
-            # Redis 캐시 삭제 (members, teams, member_teams 관련)
+            # Redis 캐시 삭제 (members, teams 관련)
             if redis_client:
                 try:
                     # 패턴 기반 삭제
-                    for pattern in ['members:*', 'teams:*', 'member_teams:*']:
+                    for pattern in ['members:*', 'teams:*']:
                         keys = redis_client.keys(pattern)
                         if keys:
                             redis_client.delete(*keys)

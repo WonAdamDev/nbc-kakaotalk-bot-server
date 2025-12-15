@@ -123,31 +123,11 @@ def member_team_get_command():
                     }
                 }), 200
         else:
-            # MongoDB 없으면 기존 Redis 방식 사용
-            member_key = make_member_key(request_room, request_member)
-
-            # 멤버가 존재하는지 확인
-            member = cache_manager.get('members', member_key)
-            if not member:
-                return jsonify({
-                    'success': False,
-                    'data': {
-                        'member': request_member,
-                        'is_member': False
-                    }
-                }), 404
-
-            # 팀 배정 조회
-            team = cache_manager.get('member_teams', member_key)
-
+            # MongoDB가 없는 경우 팀 배정 기능 사용 불가
             return jsonify({
-                'success': True,
-                'data': {
-                    'member': request_member,
-                    'team': team,
-                    'is_member': True
-                }
-            }), 200
+                'success': False,
+                'message': 'MongoDB가 필요한 기능입니다.'
+            }), 500
 
     except Exception as e:
         print(f"[MEMBER_TEAM GET] Error: {e}")
@@ -285,10 +265,6 @@ def member_team_post_command():
                 {'$set': {'team_id': team_id}}
             )
 
-            # Redis 캐시에도 저장 (하위 호환성)
-            member_key = make_member_key(request_room, request_member)
-            cache_manager.set('member_teams', member_key, request_team)
-
             print(f"[MEMBER_TEAM POST] Assigned {request_member} to team {request_team} (ID: {team_id})")
 
             return jsonify({
@@ -302,47 +278,11 @@ def member_team_post_command():
                 }
             }), 200
         else:
-            # MongoDB 없으면 기존 방식 사용
-            member_key = make_member_key(request_room, request_member)
-
-            # 멤버가 존재하는지 확인
-            member = cache_manager.get('members', member_key)
-            if not member:
-                return jsonify({
-                    'success': False,
-                    'data': {
-                        'member': request_member,
-                        'team': request_team,
-                        'assigned': False,
-                        'reason': 'member_not_found'
-                    }
-                }), 404
-
-            # 팀이 존재하는지 확인
-            team_key = f"room:{request_room}:team:{request_team}"
-            team = cache_manager.get('teams', team_key)
-            if not team:
-                return jsonify({
-                    'success': False,
-                    'data': {
-                        'member': request_member,
-                        'team': request_team,
-                        'assigned': False,
-                        'reason': 'team_not_found'
-                    }
-                }), 404
-
-            # 팀 배정
-            cache_manager.set('member_teams', member_key, request_team)
-
+            # MongoDB가 없는 경우 팀 배정 기능 사용 불가
             return jsonify({
-                'success': True,
-                'data': {
-                    'member': request_member,
-                    'team': request_team,
-                    'assigned': True
-                }
-            }), 200
+                'success': False,
+                'message': 'MongoDB가 필요한 기능입니다.'
+            }), 500
 
     except Exception as e:
         print(f"[MEMBER_TEAM POST] Error: {e}")
@@ -400,10 +340,6 @@ def member_team_delete_command():
                     {'_id': request_member_id},
                     {'$set': {'team_id': None}}
                 )
-
-                # Redis 캐시에서도 삭제
-                member_key = make_member_key(request_room, member_doc.get('name'))
-                cache_manager.delete('member_teams', member_key)
 
                 return jsonify({
                     'success': True,
@@ -472,10 +408,6 @@ def member_team_delete_command():
                     {'$set': {'team_id': None}}
                 )
 
-                # Redis 캐시에서도 삭제
-                member_key = make_member_key(request_room, request_member)
-                cache_manager.delete('member_teams', member_key)
-
                 return jsonify({
                     'success': True,
                     'data': {
@@ -486,45 +418,11 @@ def member_team_delete_command():
                     }
                 }), 200
         else:
-            # MongoDB 없으면 기존 방식
-            member_key = make_member_key(request_room, request_member)
-
-            # 멤버가 존재하는지 확인
-            member = cache_manager.get('members', member_key)
-            if not member:
-                return jsonify({
-                    'success': False,
-                    'data': {
-                        'member': request_member,
-                        'unassigned': False,
-                        'reason': 'member_not_found'
-                    }
-                }), 404
-
-        # 팀 배정이 있는지 확인
-        existing_team = cache_manager.get('member_teams', member_key)
-
-        if not existing_team:
+            # MongoDB가 없는 경우 팀 배정 기능 사용 불가
             return jsonify({
                 'success': False,
-                'data': {
-                    'member': request_member,
-                    'unassigned': False,
-                    'reason': 'no_team_assigned'
-                }
-            }), 400
-
-        # 팀 배정 삭제
-        cache_manager.delete('member_teams', member_key)
-
-        return jsonify({
-            'success': True,
-            'data': {
-                'member': request_member,
-                'previous_team': existing_team,
-                'unassigned': True
-            }
-        }), 200
+                'message': 'MongoDB가 필요한 기능입니다.'
+            }), 500
 
     except Exception as e:
         return jsonify({

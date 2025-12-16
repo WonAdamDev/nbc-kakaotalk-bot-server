@@ -1077,12 +1077,11 @@ def swap_lineup_numbers(game_id):
             ).order_by(Lineup.number).all()
             updated_lineups[team] = [l.to_dict() for l in lineups]
 
-        # WebSocket 브로드캐스트 (영향받은 팀들)
-        for team in affected_teams:
-            emit_game_update(game_id, 'lineup_swapped', {
-                'team': team,
-                'lineups': updated_lineups[team]
-            })
+        # WebSocket 브로드캐스트 (한 번에 모든 영향받은 팀의 라인업 전송)
+        emit_game_update(game_id, 'lineup_swapped', {
+            'affected_teams': list(affected_teams),
+            'lineups': updated_lineups
+        })
 
         # 응답 데이터 구성
         response_data = {

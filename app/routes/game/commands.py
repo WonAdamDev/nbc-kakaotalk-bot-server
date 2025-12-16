@@ -888,6 +888,11 @@ def swap_lineup_numbers(game_id):
     if from_team == to_team and from_number == to_number:
         return jsonify({'success': False, 'error': 'Cannot swap player with itself'}), 400
 
+    # 경기 상태에 따라 arrived 필터 결정
+    # 준비중: 모든 라인업 대상 (이어하기 경기 지원)
+    # 진행중/종료: arrived=True만 대상
+    use_arrived_filter = game.status != '준비중'
+
     try:
         # 두 선수 찾기
         player_from = Lineup.query.filter_by(
@@ -920,11 +925,13 @@ def swap_lineup_numbers(game_id):
             # 같은 팀 내에서 이동하는 경우 번호 재정렬
             if from_team == to_team:
                 # 팀에 선수가 1명뿐이면 이동할 필요 없음
-                team_player_count = Lineup.query.filter_by(
+                query = Lineup.query.filter_by(
                     game_id=game_id,
-                    team=from_team,
-                    arrived=True
-                ).count()
+                    team=from_team
+                )
+                if use_arrived_filter:
+                    query = query.filter_by(arrived=True)
+                team_player_count = query.count()
 
                 if team_player_count == 1:
                     return jsonify({
@@ -981,11 +988,13 @@ def swap_lineup_numbers(game_id):
                 db.session.flush()
 
                 # 같은 팀 내에서도 번호를 1부터 재정렬 (빈 순번 방지)
-                team_lineups = Lineup.query.filter_by(
+                query = Lineup.query.filter_by(
                     game_id=game_id,
-                    team=from_team,
-                    arrived=True
-                ).order_by(Lineup.number).all()
+                    team=from_team
+                )
+                if use_arrived_filter:
+                    query = query.filter_by(arrived=True)
+                team_lineups = query.order_by(Lineup.number).all()
 
                 # 1단계: 모두 임시 음수로 변경
                 for i, l in enumerate(team_lineups):
@@ -1009,12 +1018,14 @@ def swap_lineup_numbers(game_id):
                 db.session.flush()
 
                 # 2단계: 원래 팀에서 뒤의 번호들 -1 (빈 공간 메우기)
-                later_lineups = Lineup.query.filter(
+                query = Lineup.query.filter(
                     Lineup.game_id == game_id,
                     Lineup.team == old_team,
-                    Lineup.number > old_number,
-                    Lineup.arrived == True
-                ).order_by(Lineup.number).all()
+                    Lineup.number > old_number
+                )
+                if use_arrived_filter:
+                    query = query.filter(Lineup.arrived == True)
+                later_lineups = query.order_by(Lineup.number).all()
 
                 for i, l in enumerate(later_lineups):
                     l.number = -(i + 2)
@@ -1025,12 +1036,14 @@ def swap_lineup_numbers(game_id):
                 db.session.flush()
 
                 # 3단계: 새 팀에서 to_number 이상인 선수들을 임시 음수로 변경 후 +1
-                new_team_later_lineups = Lineup.query.filter(
+                query = Lineup.query.filter(
                     Lineup.game_id == game_id,
                     Lineup.team == to_team,
-                    Lineup.number >= to_number,
-                    Lineup.arrived == True
-                ).order_by(Lineup.number).all()
+                    Lineup.number >= to_number
+                )
+                if use_arrived_filter:
+                    query = query.filter(Lineup.arrived == True)
+                new_team_later_lineups = query.order_by(Lineup.number).all()
 
                 # 임시 음수로 변경
                 for i, l in enumerate(new_team_later_lineups):
@@ -1071,11 +1084,13 @@ def swap_lineup_numbers(game_id):
         updated_lineups = {}
 
         for team in affected_teams:
-            lineups = Lineup.query.filter_by(
+            query = Lineup.query.filter_by(
                 game_id=game_id,
-                team=team,
-                arrived=True
-            ).order_by(Lineup.number).all()
+                team=team
+            )
+            if use_arrived_filter:
+                query = query.filter_by(arrived=True)
+            lineups = query.order_by(Lineup.number).all()
             updated_lineups[team] = [l.to_dict() for l in lineups]
 
         # WebSocket 브로드캐스트 (한 번에 모든 영향받은 팀의 라인업 전송)

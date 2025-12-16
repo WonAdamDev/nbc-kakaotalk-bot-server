@@ -561,7 +561,7 @@ def copy_game(game_id):
         db.session.add(new_game)
         db.session.flush()
 
-        # 라인업 복사
+        # 라인업 복사 (출전/벤치 상태도 이어받음)
         for original_lineup in original_lineups:
             new_lineup = Lineup(
                 game_id=new_game_id,
@@ -573,7 +573,7 @@ def copy_game(game_id):
                 number=original_lineup.number,
                 arrived=True,  # 이어하기는 이전 경기 참여 선수들이므로 arrived=True
                 arrived_at=datetime.utcnow(),
-                playing_status='playing'
+                playing_status=original_lineup.playing_status  # 출전/벤치 상태 유지
             )
             db.session.add(new_lineup)
 

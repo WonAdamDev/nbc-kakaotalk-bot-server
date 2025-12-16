@@ -568,7 +568,8 @@ def copy_game(game_id):
                 team=original_lineup.team,
                 member=original_lineup.member,
                 number=original_lineup.number,
-                arrived=False,  # 도착 상태는 초기화
+                arrived=True,  # 이어하기는 이전 경기 참여 선수들이므로 arrived=True
+                arrived_at=datetime.utcnow(),
                 playing_status='playing'
             )
             db.session.add(new_lineup)

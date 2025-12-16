@@ -534,11 +534,30 @@ def copy_game(game_id):
     if not original_game:
         return jsonify({'success': False, 'error': 'Original game not found'}), 404
 
-    # 원본 라인업 조회
-    original_lineups = Lineup.query.filter_by(game_id=game_id).order_by(Lineup.team, Lineup.number).all()
+    # 원본 라인업 조회 (모든 선수 - arrived 상태 무시)
+    # 이어하기는 이전 경기의 라인업을 그대로 이어받으므로 모든 선수를 복사
+    original_lineups = Lineup.query.filter_by(
+        game_id=game_id
+    ).order_by(Lineup.team, Lineup.number).all()
 
     if not original_lineups:
         return jsonify({'success': False, 'error': 'Original game has no lineup'}), 400
+
+    # 각 팀별로 최소 5명 이상 확인
+    home_count = sum(1 for lineup in original_lineups if lineup.team == 'home')
+    away_count = sum(1 for lineup in original_lineups if lineup.team == 'away')
+
+    if home_count < 5:
+        return jsonify({
+            'success': False,
+            'error': f'Original game HOME team has only {home_count} players (need at least 5)'
+        }), 400
+
+    if away_count < 5:
+        return jsonify({
+            'success': False,
+            'error': f'Original game AWAY team has only {away_count} players (need at least 5)'
+        }), 400
 
     try:
         # 새 게임 ID 생성

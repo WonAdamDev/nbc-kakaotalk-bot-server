@@ -1,6 +1,6 @@
 -- Migration: Add parent_game_id field to games table
 -- Date: 2024-12-16
--- Description: Adds parent game reference for tracking original game when using "이어하기" (continue) feature
+-- Description: Adds parent game reference for tracking original game when using continue feature
 
 -- Add parent_game_id column with self-referential foreign key
 ALTER TABLE games ADD COLUMN IF NOT EXISTS parent_game_id VARCHAR(8);
@@ -24,4 +24,4 @@ END $$;
 CREATE INDEX IF NOT EXISTS idx_games_parent_game_id ON games(parent_game_id);
 
 -- Add comment for documentation
-COMMENT ON COLUMN games.parent_game_id IS '이어하기 기능 사용 시 원본 경기의 game_id (self-referential)';
+COMMENT ON COLUMN games.parent_game_id IS 'Original game ID when using continue feature (self-referential)';

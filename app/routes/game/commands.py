@@ -316,18 +316,17 @@ def get_all_games():
 @bp.route('/rooms', methods=['GET'])
 def get_rooms():
     """
-    모든 방 목록 조회 (중복 제거)
-    경기가 등록된 방들의 목록을 반환합니다.
+    모든 방 목록 조회
+    rooms 테이블에서 모든 방 목록을 반환합니다.
     """
     try:
-        # 모든 방 이름을 중복 없이 조회 (room이 NULL이 아닌 경우만)
-        rooms = db.session.query(Game.room).filter(
-            Game.room.isnot(None),
-            Game.room != ''
-        ).distinct().order_by(Game.room).all()
+        from app.models import Room
 
-        # 튜플을 문자열 리스트로 변환
-        room_list = [room[0] for room in rooms]
+        # rooms 테이블에서 모든 방 조회
+        rooms = Room.query.order_by(Room.name).all()
+
+        # 방 이름 리스트로 변환
+        room_list = [room.name for room in rooms]
 
         return jsonify({
             'success': True,

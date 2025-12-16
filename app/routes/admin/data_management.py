@@ -101,8 +101,16 @@ def import_data():
     start_time = time.time()
 
     try:
-        # replace_all 파라미터 확인
+        # 모드 파라미터 확인
         replace_all = request.form.get('replace_all', 'false').lower() == 'true'
+        update_merge = request.form.get('update_merge', 'false').lower() == 'true'
+
+        # 모드 충돌 체크
+        if replace_all and update_merge:
+            return jsonify({
+                'success': False,
+                'message': 'Replace All과 Update/Merge 모드를 동시에 사용할 수 없습니다.'
+            }), 400
 
         # 파일 가져오기
         if 'file' not in request.files:
@@ -156,14 +164,17 @@ def import_data():
             df['member_id'] = ''
 
         # 통계 초기화
+        mode_name = 'replace_all' if replace_all else ('update_merge' if update_merge else 'append')
         stats = {
-            'mode': 'replace_all' if replace_all else 'append',
+            'mode': mode_name,
             'total_rows': len(df),
             'rooms_created': 0,
             'rooms_skipped': 0,
             'teams_created': 0,
+            'teams_updated': 0,
             'teams_skipped': 0,
             'members_created': 0,
+            'members_updated': 0,
             'members_skipped': 0,
             'errors': []
         }
@@ -193,34 +204,48 @@ def import_data():
                 }), 500
 
         # Room 처리 (PostgreSQL)
-        unique_rooms = df['room'].unique()
-        for room_name in unique_rooms:
-            # 기존 room 확인
-            existing_room = Room.query.filter_by(name=room_name).first()
-            if existing_room:
+        if update_merge:
+            # Update/Merge 모드: Room은 생성하지 않고, 존재 여부만 검증
+            logger.info("[IMPORT] UPDATE_MERGE mode - Validating existing rooms only")
+            unique_rooms = df['room'].unique()
+            for room_name in unique_rooms:
+                existing_room = Room.query.filter_by(name=room_name).first()
+                if not existing_room:
+                    return jsonify({
+                        'success': False,
+                        'message': f'Room "{room_name}"이(가) 존재하지 않습니다. Update/Merge 모드에서는 방을 새로 생성할 수 없습니다.'
+                    }), 400
                 stats['rooms_skipped'] += 1
-                logger.info(f"[IMPORT] Room exists: {room_name}, skipping")
-            else:
-                # 새 room 생성
-                room_id = generate_room_id()
-                while Room.query.filter_by(room_id=room_id).first():
+        else:
+            # Append/Replace All 모드: Room 생성
+            unique_rooms = df['room'].unique()
+            for room_name in unique_rooms:
+                # 기존 room 확인
+                existing_room = Room.query.filter_by(name=room_name).first()
+                if existing_room:
+                    stats['rooms_skipped'] += 1
+                    logger.info(f"[IMPORT] Room exists: {room_name}, skipping")
+                else:
+                    # 새 room 생성
                     room_id = generate_room_id()
+                    while Room.query.filter_by(room_id=room_id).first():
+                        room_id = generate_room_id()
 
-                new_room = Room(room_id=room_id, name=room_name)
-                db.session.add(new_room)
-                stats['rooms_created'] += 1
-                logger.info(f"[IMPORT] Created room: {room_name} (ID: {room_id})")
+                    new_room = Room(room_id=room_id, name=room_name)
+                    db.session.add(new_room)
+                    stats['rooms_created'] += 1
+                    logger.info(f"[IMPORT] Created room: {room_name} (ID: {room_id})")
 
-        # PostgreSQL 커밋
-        try:
-            db.session.commit()
-        except Exception as e:
-            db.session.rollback()
-            logger.error(f"[IMPORT] Room creation failed: {str(e)}")
-            return jsonify({
-                'success': False,
-                'message': f'Room 생성 실패: {str(e)}'
-            }), 500
+            # PostgreSQL 커밋
+            try:
+                db.session.commit()
+            except Exception as e:
+                db.session.rollback()
+                logger.error(f"[IMPORT] Room creation failed: {str(e)}")
+                return jsonify({
+                    'success': False,
+                    'message': f'Room 생성 실패: {str(e)}'
+                }), 500
 
         # 팀 처리 (중복 제거)
         teams_to_create = {}  # key: (room_name, team_name), value: team_id
@@ -247,14 +272,33 @@ def import_data():
             if team_id_from_excel:
                 existing_team = Team.query.filter_by(team_id=team_id_from_excel).first()
                 if existing_team:
-                    # 기존 팀 사용
+                    if update_merge:
+                        # Update/Merge 모드: 팀 이름 업데이트
+                        if existing_team.name != team_name:
+                            existing_team.name = team_name
+                            stats['teams_updated'] += 1
+                            logger.info(f"[IMPORT] Updated team: {team_id_from_excel} -> {team_name}")
+                        else:
+                            stats['teams_skipped'] += 1
+                            logger.info(f"[IMPORT] Team unchanged: {team_id_from_excel}")
+                    else:
+                        # Append 모드: 기존 팀 사용
+                        stats['teams_skipped'] += 1
+                        logger.info(f"[IMPORT] Team exists with ID: {team_id_from_excel}, skipping")
                     teams_to_create[(room_name, team_name)] = team_id_from_excel
-                    stats['teams_skipped'] += 1
-                    logger.info(f"[IMPORT] Team exists with ID: {team_id_from_excel}, skipping")
                     continue
                 else:
-                    # DB에 없으므로 새 ID 발급
-                    logger.warning(f"[IMPORT] team_id {team_id_from_excel} not found, creating with new ID")
+                    if update_merge:
+                        # Update/Merge 모드: team_id가 있는데 DB에 없으면 에러
+                        logger.error(f"[IMPORT] team_id {team_id_from_excel} not found in UPDATE_MERGE mode")
+                        stats['errors'].append({
+                            'row': '?',
+                            'error': f'team_id {team_id_from_excel}이(가) DB에 존재하지 않습니다'
+                        })
+                        continue
+                    else:
+                        # Append 모드: DB에 없으므로 새 ID 발급
+                        logger.warning(f"[IMPORT] team_id {team_id_from_excel} not found, creating with new ID")
 
             # team_id 미지정 또는 DB에 없음 - room_id+name으로 확인
             existing_team_by_name = Team.query.filter_by(
@@ -308,17 +352,48 @@ def import_data():
                     })
                     continue
 
+                # 팀 배정
+                team_id = None
+                if team_name and (room_name, team_name) in teams_to_create:
+                    team_id = teams_to_create[(room_name, team_name)]
+
                 # member_id가 지정되어 있으면 DB 확인
                 if member_id_from_excel:
                     existing_member = Member.query.filter_by(member_id=member_id_from_excel).first()
                     if existing_member:
-                        # 기존 멤버 사용 (스킵)
-                        stats['members_skipped'] += 1
-                        logger.info(f"[IMPORT] Member exists with ID: {member_id_from_excel}, skipping")
+                        if update_merge:
+                            # Update/Merge 모드: 멤버 정보 업데이트
+                            updated = False
+                            if existing_member.name != member_name:
+                                existing_member.name = member_name
+                                updated = True
+                            if existing_member.team_id != team_id:
+                                existing_member.team_id = team_id
+                                updated = True
+
+                            if updated:
+                                stats['members_updated'] += 1
+                                logger.info(f"[IMPORT] Updated member: {member_id_from_excel} -> {member_name} (team: {team_id})")
+                            else:
+                                stats['members_skipped'] += 1
+                                logger.info(f"[IMPORT] Member unchanged: {member_id_from_excel}")
+                        else:
+                            # Append 모드: 기존 멤버 사용 (스킵)
+                            stats['members_skipped'] += 1
+                            logger.info(f"[IMPORT] Member exists with ID: {member_id_from_excel}, skipping")
                         continue
                     else:
-                        # DB에 없으므로 새 ID 발급
-                        logger.warning(f"[IMPORT] member_id {member_id_from_excel} not found, creating with new ID")
+                        if update_merge:
+                            # Update/Merge 모드: member_id가 있는데 DB에 없으면 에러
+                            logger.error(f"[IMPORT] member_id {member_id_from_excel} not found in UPDATE_MERGE mode")
+                            stats['errors'].append({
+                                'row': index + 2,
+                                'error': f'member_id {member_id_from_excel}이(가) DB에 존재하지 않습니다'
+                            })
+                            continue
+                        else:
+                            # Append 모드: DB에 없으므로 새 ID 발급
+                            logger.warning(f"[IMPORT] member_id {member_id_from_excel} not found, creating with new ID")
 
                 # member_id 미지정 또는 DB에 없음 - room_id+name으로 확인
                 existing_member_by_name = Member.query.filter_by(
@@ -327,18 +402,22 @@ def import_data():
                 ).first()
 
                 if existing_member_by_name:
-                    # 기존 멤버 사용 (스킵)
-                    stats['members_skipped'] += 1
-                    continue
+                    if update_merge:
+                        # Update/Merge 모드: 이름으로 찾은 멤버 업데이트
+                        if existing_member_by_name.team_id != team_id:
+                            existing_member_by_name.team_id = team_id
+                            stats['members_updated'] += 1
+                            logger.info(f"[IMPORT] Updated member by name: {member_name} (team: {team_id})")
+                        else:
+                            stats['members_skipped'] += 1
+                        continue
+                    else:
+                        # Append 모드: 기존 멤버 사용 (스킵)
+                        stats['members_skipped'] += 1
+                        continue
 
                 # 새 멤버 생성
                 new_member_id = generate_member_id()
-
-                # 팀 배정
-                team_id = None
-                if team_name and (room_name, team_name) in teams_to_create:
-                    team_id = teams_to_create[(room_name, team_name)]
-
                 new_member = Member(
                     member_id=new_member_id,
                     room_id=room.room_id,

@@ -390,38 +390,41 @@ def start_game(game_id):
     if game.status != '준비중':
         return jsonify({'success': False, 'error': f'Game is already {game.status}'}), 400
 
-    # 경기 시작 후 팀 정보 변경 방지
-    # (현재는 start_game이 '준비중'일 때만 실행되므로 이미 방지되지만,
-    #  나중에 게임 업데이트 엔드포인트가 추가될 경우를 대비한 명시적 체크)
-    if game.team_home or game.team_away:
-        return jsonify({
-            'success': False,
-            'error': 'Teams are already set. Cannot change teams after they are set.'
-        }), 400
-
     data = request.get_json() or {}
     team_home = data.get('team_home')
     team_away = data.get('team_away')
 
-    # 팀 선택 검증 - 필수
-    if not team_home or not team_away:
-        return jsonify({
-            'success': False,
-            'error': 'Both team_home and team_away are required'
-        }), 400
+    # 팀이 이미 설정되어 있는지 확인 (이어하기 경기 등)
+    teams_already_set = bool(game.team_home and game.team_away)
 
-    # 두 팀이 같은지 확인
-    if team_home == team_away:
-        return jsonify({
-            'success': False,
-            'error': 'team_home and team_away must be different'
-        }), 400
+    if teams_already_set:
+        # 이미 팀이 설정되어 있으면 기존 팀 사용 (이어하기 경기)
+        team_home = game.team_home
+        team_away = game.team_away
+    else:
+        # 팀이 설정되지 않았으면 Body에서 필수로 받아야 함
+        if not team_home or not team_away:
+            return jsonify({
+                'success': False,
+                'error': 'Both team_home and team_away are required'
+            }), 400
+
+        # 두 팀이 같은지 확인
+        if team_home == team_away:
+            return jsonify({
+                'success': False,
+                'error': 'team_home and team_away must be different'
+            }), 400
 
     try:
         game.status = '진행중'
         game.started_at = datetime.utcnow()
-        game.team_home = team_home
-        game.team_away = team_away
+
+        # 팀이 아직 설정되지 않았으면 설정
+        if not teams_already_set:
+            game.team_home = team_home
+            game.team_away = team_away
+
         db.session.commit()
 
         # WebSocket 브로드캐스트

@@ -15,11 +15,69 @@ class Room(db.Model):
     name = db.Column(db.String(100), unique=True, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+    # 관계
+    teams = db.relationship('Team', backref='room', cascade='all, delete-orphan', lazy=True)
+    members = db.relationship('Member', backref='room', cascade='all, delete-orphan', lazy=True)
+
     def to_dict(self):
         """딕셔너리 변환"""
         return {
             'room_id': self.room_id,
             'name': self.name,
+            'created_at': self.created_at.isoformat() + 'Z' if self.created_at else None
+        }
+
+
+class Team(db.Model):
+    """팀 정보"""
+    __tablename__ = 'teams'
+
+    team_id = db.Column(db.String(13), primary_key=True)  # TEAM_XXXXXXXX
+    room_id = db.Column(db.String(8), db.ForeignKey('rooms.room_id', ondelete='CASCADE'), nullable=False)
+    name = db.Column(db.String(100), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # 관계
+    members = db.relationship('Member', backref='team', lazy=True)
+
+    __table_args__ = (
+        db.UniqueConstraint('room_id', 'name', name='unique_team_per_room'),
+        db.Index('idx_team_room', 'room_id'),
+    )
+
+    def to_dict(self):
+        """딕셔너리 변환"""
+        return {
+            'team_id': self.team_id,
+            'room_id': self.room_id,
+            'name': self.name,
+            'created_at': self.created_at.isoformat() + 'Z' if self.created_at else None
+        }
+
+
+class Member(db.Model):
+    """멤버 정보"""
+    __tablename__ = 'members'
+
+    member_id = db.Column(db.String(13), primary_key=True)  # MEM_XXXXXXXX
+    room_id = db.Column(db.String(8), db.ForeignKey('rooms.room_id', ondelete='CASCADE'), nullable=False)
+    name = db.Column(db.String(100), nullable=False)
+    team_id = db.Column(db.String(13), db.ForeignKey('teams.team_id', ondelete='SET NULL'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        db.Index('idx_member_room', 'room_id'),
+        db.Index('idx_member_team', 'team_id'),
+        db.Index('idx_member_room_name', 'room_id', 'name'),
+    )
+
+    def to_dict(self):
+        """딕셔너리 변환"""
+        return {
+            'member_id': self.member_id,
+            'room_id': self.room_id,
+            'name': self.name,
+            'team_id': self.team_id,
             'created_at': self.created_at.isoformat() + 'Z' if self.created_at else None
         }
 

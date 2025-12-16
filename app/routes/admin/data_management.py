@@ -3,9 +3,8 @@ Admin 데이터 관리 API - Import/Export
 """
 from flask import Blueprint, request, jsonify, send_file, current_app
 from app.routes.admin.auth import require_admin
-from app import cache_manager, redis_client
+from app.models import db, Room, Team, Member
 from app.utils import generate_member_id, generate_team_id
-from app.models import db, Room
 from datetime import datetime
 import pandas as pd
 import io
@@ -102,20 +101,6 @@ def import_data():
     start_time = time.time()
 
     try:
-        # cache_manager 확인
-        if cache_manager is None:
-            return jsonify({
-                'success': False,
-                'message': '캐시 시스템을 사용할 수 없습니다.'
-            }), 500
-
-        mongo_db = cache_manager.mongo_db
-        if mongo_db is None:
-            return jsonify({
-                'success': False,
-                'message': 'MongoDB를 사용할 수 없습니다.'
-            }), 500
-
         # replace_all 파라미터 확인
         replace_all = request.form.get('replace_all', 'false').lower() == 'true'
 
@@ -187,34 +172,25 @@ def import_data():
         if replace_all:
             logger.warning("[IMPORT] REPLACE_ALL mode - Deleting all rooms, members and teams")
 
-            # MongoDB 전체 삭제
-            deleted_members = mongo_db['members'].delete_many({})
-            deleted_teams = mongo_db['teams'].delete_many({})
-
-            stats['deleted_members'] = deleted_members.deleted_count
-            stats['deleted_teams'] = deleted_teams.deleted_count
-
-            # PostgreSQL rooms 테이블 삭제
+            # PostgreSQL 전체 삭제 (CASCADE로 members, teams도 함께 삭제됨)
             try:
+                deleted_members = db.session.query(Member).delete()
+                deleted_teams = db.session.query(Team).delete()
                 deleted_rooms = db.session.query(Room).delete()
                 db.session.commit()
+
+                stats['deleted_members'] = deleted_members
+                stats['deleted_teams'] = deleted_teams
                 stats['deleted_rooms'] = deleted_rooms
-                logger.info(f"[IMPORT] Deleted {deleted_rooms} rooms from PostgreSQL")
+
+                logger.info(f"[IMPORT] Deleted {deleted_rooms} rooms, {deleted_teams} teams, {deleted_members} members")
             except Exception as e:
                 db.session.rollback()
-                logger.error(f"[IMPORT] PostgreSQL rooms delete error: {str(e)}")
-
-            # Redis 캐시 삭제 (members, teams 관련)
-            if redis_client is not None:
-                try:
-                    # 패턴 기반 삭제
-                    for pattern in ['members:*', 'teams:*']:
-                        keys = redis_client.keys(pattern)
-                        if keys:
-                            redis_client.delete(*keys)
-                    logger.info(f"[IMPORT] Redis cache cleared for members/teams")
-                except Exception as e:
-                    logger.error(f"[IMPORT] Redis clear error: {str(e)}")
+                logger.error(f"[IMPORT] PostgreSQL delete error: {str(e)}")
+                return jsonify({
+                    'success': False,
+                    'message': f'데이터 삭제 실패: {str(e)}'
+                }), 500
 
         # Room 처리 (PostgreSQL)
         unique_rooms = df['room'].unique()
@@ -247,26 +223,32 @@ def import_data():
             }), 500
 
         # 팀 처리 (중복 제거)
-        teams_to_create = {}  # key: (room, team_name), value: team_id
+        teams_to_create = {}  # key: (room_name, team_name), value: team_id
 
         for _, row in df.iterrows():
             if not row['team']:  # 팀이 없으면 스킵
                 continue
 
-            room = row['room']
+            room_name = row['room']
             team_name = row['team']
             team_id_from_excel = row['team_id']
 
             # 이미 처리한 팀이면 스킵
-            if (room, team_name) in teams_to_create:
+            if (room_name, team_name) in teams_to_create:
+                continue
+
+            # room_id 가져오기
+            room = Room.query.filter_by(name=room_name).first()
+            if not room:
+                logger.error(f"[IMPORT] Room not found: {room_name}")
                 continue
 
             # team_id가 지정되어 있으면 DB 확인
             if team_id_from_excel:
-                existing_team = mongo_db['teams'].find_one({'_id': team_id_from_excel})
+                existing_team = Team.query.filter_by(team_id=team_id_from_excel).first()
                 if existing_team:
                     # 기존 팀 사용
-                    teams_to_create[(room, team_name)] = team_id_from_excel
+                    teams_to_create[(room_name, team_name)] = team_id_from_excel
                     stats['teams_skipped'] += 1
                     logger.info(f"[IMPORT] Team exists with ID: {team_id_from_excel}, skipping")
                     continue
@@ -274,39 +256,61 @@ def import_data():
                     # DB에 없으므로 새 ID 발급
                     logger.warning(f"[IMPORT] team_id {team_id_from_excel} not found, creating with new ID")
 
-            # team_id 미지정 또는 DB에 없음 - room+name으로 확인
-            existing_team_by_name = mongo_db['teams'].find_one({
-                'room_name': room,
-                'name': team_name
-            })
+            # team_id 미지정 또는 DB에 없음 - room_id+name으로 확인
+            existing_team_by_name = Team.query.filter_by(
+                room_id=room.room_id,
+                name=team_name
+            ).first()
 
             if existing_team_by_name:
                 # 기존 팀 사용
-                teams_to_create[(room, team_name)] = existing_team_by_name['_id']
+                teams_to_create[(room_name, team_name)] = existing_team_by_name.team_id
                 stats['teams_skipped'] += 1
             else:
                 # 새 팀 생성
                 new_team_id = generate_team_id()
-                mongo_db['teams'].insert_one({
-                    '_id': new_team_id,
-                    'room_name': room,
-                    'name': team_name,
-                    'created_at': datetime.utcnow()
-                })
-                teams_to_create[(room, team_name)] = new_team_id
+                new_team = Team(
+                    team_id=new_team_id,
+                    room_id=room.room_id,
+                    name=team_name
+                )
+                db.session.add(new_team)
+                teams_to_create[(room_name, team_name)] = new_team_id
                 stats['teams_created'] += 1
+                logger.info(f"[IMPORT] Created team: {team_name} (ID: {new_team_id}) in room {room_name}")
+
+        # Teams 커밋
+        try:
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"[IMPORT] Team creation failed: {str(e)}")
+            return jsonify({
+                'success': False,
+                'message': f'Team 생성 실패: {str(e)}'
+            }), 500
 
         # 멤버 처리
         for index, row in df.iterrows():
             try:
-                room = row['room']
+                room_name = row['room']
                 member_name = row['member']
                 team_name = row['team']
                 member_id_from_excel = row['member_id']
 
+                # room_id 가져오기
+                room = Room.query.filter_by(name=room_name).first()
+                if not room:
+                    logger.error(f"[IMPORT] Room not found: {room_name}")
+                    stats['errors'].append({
+                        'row': index + 2,
+                        'error': f'Room not found: {room_name}'
+                    })
+                    continue
+
                 # member_id가 지정되어 있으면 DB 확인
                 if member_id_from_excel:
-                    existing_member = mongo_db['members'].find_one({'_id': member_id_from_excel})
+                    existing_member = Member.query.filter_by(member_id=member_id_from_excel).first()
                     if existing_member:
                         # 기존 멤버 사용 (스킵)
                         stats['members_skipped'] += 1
@@ -316,11 +320,11 @@ def import_data():
                         # DB에 없으므로 새 ID 발급
                         logger.warning(f"[IMPORT] member_id {member_id_from_excel} not found, creating with new ID")
 
-                # member_id 미지정 또는 DB에 없음 - room+name으로 확인
-                existing_member_by_name = mongo_db['members'].find_one({
-                    'room_name': room,
-                    'name': member_name
-                })
+                # member_id 미지정 또는 DB에 없음 - room_id+name으로 확인
+                existing_member_by_name = Member.query.filter_by(
+                    room_id=room.room_id,
+                    name=member_name
+                ).first()
 
                 if existing_member_by_name:
                     # 기존 멤버 사용 (스킵)
@@ -332,17 +336,18 @@ def import_data():
 
                 # 팀 배정
                 team_id = None
-                if team_name and (room, team_name) in teams_to_create:
-                    team_id = teams_to_create[(room, team_name)]
+                if team_name and (room_name, team_name) in teams_to_create:
+                    team_id = teams_to_create[(room_name, team_name)]
 
-                mongo_db['members'].insert_one({
-                    '_id': new_member_id,
-                    'room_name': room,
-                    'name': member_name,
-                    'team_id': team_id,
-                    'created_at': datetime.utcnow()
-                })
+                new_member = Member(
+                    member_id=new_member_id,
+                    room_id=room.room_id,
+                    name=member_name,
+                    team_id=team_id
+                )
+                db.session.add(new_member)
                 stats['members_created'] += 1
+                logger.info(f"[IMPORT] Created member: {member_name} (ID: {new_member_id})")
 
             except Exception as e:
                 logger.error(f"[IMPORT] Error processing row {index + 2}: {str(e)}")
@@ -351,17 +356,20 @@ def import_data():
                     'error': str(e)
                 })
 
+        # Members 커밋
+        try:
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"[IMPORT] Member creation failed: {str(e)}")
+            return jsonify({
+                'success': False,
+                'message': f'Member 생성 실패: {str(e)}'
+            }), 500
+
         # 처리 시간 계산
         processing_time = int((time.time() - start_time) * 1000)
         stats['processing_time_ms'] = processing_time
-
-        # Redis 캐시 새로고침 (MongoDB → Redis)
-        if cache_manager is not None and redis_client is not None:
-            try:
-                logger.info("[IMPORT] Reloading cache from MongoDB to Redis...")
-                cache_manager.load_all_to_cache()
-            except Exception as e:
-                logger.warning(f"[IMPORT] Cache reload failed: {str(e)}")
 
         logger.info(f"[IMPORT] Completed: {stats}")
 
@@ -385,45 +393,34 @@ def export_data():
     전체 멤버/팀 데이터를 Excel로 Export
     """
     try:
-        # cache_manager 확인
-        if cache_manager is None:
-            return jsonify({
-                'success': False,
-                'message': '캐시 시스템을 사용할 수 없습니다.'
-            }), 500
-
-        mongo_db = cache_manager.mongo_db
-        if mongo_db is None:
-            return jsonify({
-                'success': False,
-                'message': 'MongoDB를 사용할 수 없습니다.'
-            }), 500
-
-        # 팀 데이터 조회 (ID -> 이름 매핑)
-        teams_cursor = mongo_db['teams'].find({})
-        teams_dict = {team['_id']: team.get('name', '') for team in teams_cursor}
-
-        # 멤버 데이터 조회
-        members_cursor = mongo_db['members'].find({})
+        # 모든 멤버 조회 (JOIN으로 room, team 정보 포함)
+        members = db.session.query(
+            Room.name.label('room_name'),
+            Member.name.label('member_name'),
+            Member.member_id,
+            Team.name.label('team_name'),
+            Team.team_id
+        ).join(
+            Room, Member.room_id == Room.room_id
+        ).outerjoin(
+            Team, Member.team_id == Team.team_id
+        ).order_by(
+            Room.name, Member.name
+        ).all()
 
         # Export 데이터 구조화
         export_data = []
-        for member in members_cursor:
-            team_id = member.get('team_id')
-            team_name = teams_dict.get(team_id, '') if team_id else ''
-
+        for member in members:
             export_data.append({
-                'room': member.get('room_name', ''),
-                'member': member.get('name', ''),
-                'member_id': member.get('_id', ''),
-                'team': team_name,
-                'team_id': team_id or ''
+                'room': member.room_name,
+                'member': member.member_name,
+                'team': member.team_name or '',
+                'team_id': member.team_id or '',
+                'member_id': member.member_id
             })
 
-        # DataFrame 생성 및 정렬
+        # DataFrame 생성
         df = pd.DataFrame(export_data)
-        if len(df) > 0:
-            df = df.sort_values(['room', 'member'])
 
         # 컬럼 순서 지정
         df = df[['room', 'member', 'team', 'team_id', 'member_id']]

@@ -19,14 +19,7 @@ class Config:
     # Frontend URL
     FRONTEND_URL = os.environ.get('FRONTEND_URL') or 'http://localhost:3000'
 
-    # Redis (캐시)
-    REDIS_URL = os.environ.get('REDIS_URL') or 'redis://localhost:6379'
-
-    # MongoDB (팀/멤버)
-    MONGO_URI = os.environ.get('MONGO_URI') or 'mongodb://localhost:27017/'
-    MONGO_DB_NAME = os.environ.get('MONGO_DB_NAME') or 'nbc_kakaotalk_bot'
-
-    # PostgreSQL (경기 데이터)
+    # PostgreSQL (모든 데이터: 방/팀/멤버/경기)
     SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or \
         'sqlite:///basketball_games.db'  # 로컬 개발용 SQLite
     SQLALCHEMY_TRACK_MODIFICATIONS = False

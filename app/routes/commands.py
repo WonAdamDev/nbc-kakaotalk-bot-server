@@ -1,5 +1,4 @@
 from flask import Blueprint, request, jsonify
-from app import cache_manager
 
 bp = Blueprint('commands', __name__, url_prefix='/api/commands')
 

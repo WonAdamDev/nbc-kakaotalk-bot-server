@@ -1,14 +1,14 @@
 # NBC KakaoTalk Bot - API Server
 #
-# Seed 기능은 별도의 db-seeder 서비스로 분리되었습니다.
-# 서버는 API 처리만 담당합니다.
+# PostgreSQL 단일 DB 사용 (rooms, teams, members, games)
 #
 # Railway 배포 방법:
 # 1. 환경 변수 설정:
 #    - DEBUG: False (프로덕션)
-#    - REDIS_URL: Redis 서비스의 REDIS_URL 참조
-#    - MONGO_URI: MongoDB 서비스의 MONGO_URI 참조
-#    - MONGO_DB_NAME: nbc_kakaotalk_bot
+#    - DATABASE_URL: PostgreSQL 서비스의 DATABASE_URL 참조
+#    - ADMIN_PASSWORD: 관리자 비밀번호
+#    - JWT_SECRET_KEY: JWT 시크릿 키
+#    - FRONTEND_URL: 프론트엔드 URL
 # 2. 자동 배포됨
 #
 # Flask-SocketIO를 위해 gevent worker 사용

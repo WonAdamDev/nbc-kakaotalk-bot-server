@@ -101,6 +101,7 @@ class Game(db.Model):
     final_score_home = db.Column(db.Integer)
     final_score_away = db.Column(db.Integer)
     winner = db.Column(db.String(10))  # home, away, 무승부
+    parent_game_id = db.Column(db.String(8), db.ForeignKey('games.game_id', ondelete='SET NULL'), nullable=True)  # 이어하기 시 원본 경기
 
     # 관계 (CASCADE DELETE)
     lineups = db.relationship('Lineup', backref='game', cascade='all, delete-orphan', lazy=True)
@@ -125,7 +126,8 @@ class Game(db.Model):
                 'home': self.final_score_home,
                 'away': self.final_score_away
             } if self.final_score_home is not None else None,
-            'winner': self.winner
+            'winner': self.winner,
+            'parent_game_id': self.parent_game_id
         }
 
 

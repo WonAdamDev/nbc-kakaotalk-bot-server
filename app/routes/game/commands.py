@@ -556,7 +556,8 @@ def copy_game(game_id):
             status='준비중',
             current_quarter=0,
             team_home=original_game.team_home,
-            team_away=original_game.team_away
+            team_away=original_game.team_away,
+            parent_game_id=game_id  # 원본 경기 ID 저장
         )
         db.session.add(new_game)
         db.session.flush()

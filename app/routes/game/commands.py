@@ -518,6 +518,82 @@ def delete_game(game_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@bp.route('/<game_id>/copy', methods=['POST'])
+@require_admin
+def copy_game(game_id):
+    """
+    이전 경기를 복사해서 새 경기 생성 (라인업 포함)
+    원본 경기의 라인업, 팀 배정을 그대로 복사합니다.
+    """
+    # 원본 경기 조회
+    original_game = Game.query.filter_by(game_id=game_id).first()
+
+    if not original_game:
+        return jsonify({'success': False, 'error': 'Original game not found'}), 404
+
+    # 원본 라인업 조회
+    original_lineups = Lineup.query.filter_by(game_id=game_id).order_by(Lineup.team, Lineup.number).all()
+
+    if not original_lineups:
+        return jsonify({'success': False, 'error': 'Original game has no lineup'}), 400
+
+    try:
+        # 새 게임 ID 생성
+        new_game_id = generate_game_id()
+        while Game.query.filter_by(game_id=new_game_id).first():
+            new_game_id = generate_game_id()
+
+        # 새 게임 생성
+        new_game = Game(
+            game_id=new_game_id,
+            room_id=original_game.room_id,
+            room=original_game.room,
+            creator='Admin (이어하기)',
+            date=date.today(),
+            status='준비중',
+            current_quarter=0,
+            team_home=original_game.team_home,
+            team_away=original_game.team_away
+        )
+        db.session.add(new_game)
+        db.session.flush()
+
+        # 라인업 복사
+        for original_lineup in original_lineups:
+            new_lineup = Lineup(
+                game_id=new_game_id,
+                member_id=original_lineup.member_id,
+                is_guest=original_lineup.is_guest,
+                team_id_snapshot=original_lineup.team_id_snapshot,
+                team=original_lineup.team,
+                member=original_lineup.member,
+                number=original_lineup.number,
+                arrived=False,  # 도착 상태는 초기화
+                playing_status='playing'
+            )
+            db.session.add(new_lineup)
+
+        db.session.commit()
+
+        # 게임 URL 생성
+        frontend_url = get_frontend_url()
+        game_url = f"{frontend_url}/game/{new_game_id}"
+
+        return jsonify({
+            'success': True,
+            'data': {
+                'game_id': new_game_id,
+                'url': game_url,
+                'game': new_game.to_dict(),
+                'copied_players': len(original_lineups)
+            }
+        }), 201
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @bp.route('/<game_id>/lineup/arrival', methods=['POST'])
 def player_arrival(game_id):
     """

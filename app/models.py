@@ -89,7 +89,7 @@ class Game(db.Model):
     game_id = db.Column(db.String(8), primary_key=True)
     room_id = db.Column(db.String(8), db.ForeignKey('rooms.room_id', ondelete='CASCADE'), nullable=False)
     room = db.Column(db.String(100), nullable=False)  # 호환성 유지용 (deprecated)
-    creator = db.Column(db.String(50))
+    alias = db.Column(db.String(100), nullable=False)  # 경기 별칭 (기본값: date)
     date = db.Column(db.Date, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     started_at = db.Column(db.DateTime)
@@ -113,7 +113,7 @@ class Game(db.Model):
             'game_id': self.game_id,
             'room_id': self.room_id,
             'room': self.room,
-            'creator': self.creator,
+            'alias': self.alias,
             'date': self.date.isoformat() if self.date else None,
             'created_at': self.created_at.isoformat() + 'Z' if self.created_at else None,
             'started_at': self.started_at.isoformat() + 'Z' if self.started_at else None,

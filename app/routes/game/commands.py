@@ -81,13 +81,13 @@ def create_game():
     경기 생성
     Body: {
         "room": "카카오톡 방 이름",
-        "creator": "생성자 이름",
+        "alias": "경기 별칭" (optional, 기본값: date),
         "date": "2024-01-25" (optional, 기본값: 오늘)
     }
     """
     data = request.get_json()
     room = data.get('room')
-    creator = data.get('creator')
+    alias = data.get('alias')
     game_date = data.get('date')
 
     if not room:
@@ -101,6 +101,10 @@ def create_game():
             return jsonify({'success': False, 'error': 'Invalid date format (use YYYY-MM-DD)'}), 400
     else:
         game_date = date.today()
+
+    # 별칭 설정 (기본값: 날짜)
+    if not alias or not alias.strip():
+        alias = game_date.isoformat()
 
     # 게임 ID 생성 (충돌 방지)
     game_id = generate_game_id()
@@ -116,7 +120,7 @@ def create_game():
             game_id=game_id,
             room_id=room_id,
             room=room,
-            creator=creator,
+            alias=alias,
             date=game_date,
             status='준비중',
             current_quarter=0
@@ -163,7 +167,7 @@ def create_game():
                     game_id=game_id,
                     room_id=room_id,
                     room=room,
-                    creator=creator,
+                    alias=alias,
                     date=game_date,
                     status='준비중',
                     current_quarter=0
@@ -570,7 +574,7 @@ def copy_game(game_id):
             game_id=new_game_id,
             room_id=original_game.room_id,
             room=original_game.room,
-            creator='Admin (이어하기)',
+            alias=f"{original_game.alias} (이어하기)",
             date=date.today(),
             status='준비중',
             current_quarter=0,

@@ -6,7 +6,8 @@
 ALTER TABLE games ADD COLUMN IF NOT EXISTS alias VARCHAR(100);
 
 -- Update existing games to use date as alias where alias is null
-UPDATE games SET alias = CAST(date AS VARCHAR) WHERE alias IS NULL;
+-- Use TO_CHAR for proper date formatting and COALESCE for NULL dates
+UPDATE games SET alias = COALESCE(TO_CHAR(date, 'YYYY-MM-DD'), 'Unknown') WHERE alias IS NULL OR alias = '';
 
 -- Make alias NOT NULL after setting default values
 ALTER TABLE games ALTER COLUMN alias SET NOT NULL;

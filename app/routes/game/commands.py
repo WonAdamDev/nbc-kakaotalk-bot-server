@@ -266,14 +266,17 @@ def get_all_games():
                 'room': game.room,
                 'room_id': game.room_id,
                 'room_url': f"{frontend_url}/room/{game.room_id}",
-                'creator': game.creator,
+                'alias': game.alias,
                 'date': game.date.isoformat() if game.date else None,
                 'created_at': game.created_at.isoformat() + 'Z' if game.created_at else None,
                 'status': game.status,
                 'current_quarter': game.current_quarter,
+                'team_home': game.team_home,
+                'team_away': game.team_away,
                 'winner': game.winner,
                 'final_score_home': game.final_score_home,
-                'final_score_away': game.final_score_away
+                'final_score_away': game.final_score_away,
+                'parent_game_id': game.parent_game_id
             })
 
         return jsonify({

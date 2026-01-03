@@ -6,10 +6,10 @@ from app.models import db, ScheduledMessage, Room
 from app.routes.admin.auth import require_admin
 from datetime import datetime, time
 
-bp = Blueprint('scheduled_messages', __name__, url_prefix='/api/scheduled-message')
+bp = Blueprint('scheduled_messages', __name__, url_prefix='/api/scheduled-messages')
 
 
-@bp.route('s', methods=['GET'])
+@bp.route('', methods=['GET'])
 def get_scheduled_messages():
     """
     예약 메시지 목록 조회 (관리자용)

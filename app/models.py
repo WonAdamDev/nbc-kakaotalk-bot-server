@@ -217,3 +217,78 @@ class Quarter(db.Model):
             'started_at': self.started_at.isoformat() + 'Z' if self.started_at else None,
             'ended_at': self.ended_at.isoformat() + 'Z' if self.ended_at else None
         }
+
+
+class Tag(db.Model):
+    """태그 정보"""
+    __tablename__ = 'tags'
+
+    tag_id = db.Column(db.Integer, primary_key=True)
+    room_id = db.Column(db.String(8), db.ForeignKey('rooms.room_id', ondelete='CASCADE'), nullable=False)
+    name = db.Column(db.String(50), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # 관계
+    member_tags = db.relationship('MemberTag', backref='tag', cascade='all, delete-orphan', lazy=True)
+
+    __table_args__ = (
+        db.UniqueConstraint('room_id', 'name', name='unique_tag_per_room'),
+        db.Index('idx_tag_room', 'room_id'),
+    )
+
+    def to_dict(self):
+        """딕셔너리 변환"""
+        return {
+            'tag_id': self.tag_id,
+            'room_id': self.room_id,
+            'name': self.name,
+            'created_at': self.created_at.isoformat() + 'Z' if self.created_at else None
+        }
+
+
+class MemberTag(db.Model):
+    """멤버-태그 연결"""
+    __tablename__ = 'member_tags'
+
+    id = db.Column(db.Integer, primary_key=True)
+    member_id = db.Column(db.String(13), db.ForeignKey('members.member_id', ondelete='CASCADE'), nullable=False)
+    tag_id = db.Column(db.Integer, db.ForeignKey('tags.tag_id', ondelete='CASCADE'), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        db.UniqueConstraint('member_id', 'tag_id', name='unique_member_tag'),
+        db.Index('idx_member_tag_member', 'member_id'),
+        db.Index('idx_member_tag_tag', 'tag_id'),
+    )
+
+
+class ScheduledMessage(db.Model):
+    """예약 메시지"""
+    __tablename__ = 'scheduled_messages'
+
+    id = db.Column(db.Integer, primary_key=True)
+    room_id = db.Column(db.String(8), db.ForeignKey('rooms.room_id', ondelete='CASCADE'), nullable=False)
+    message = db.Column(db.Text, nullable=False)
+    scheduled_time = db.Column(db.Time, nullable=False)
+    days_of_week = db.Column(db.ARRAY(db.Integer), nullable=False)
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_by = db.Column(db.String(100))
+
+    __table_args__ = (
+        db.Index('idx_scheduled_message_room', 'room_id'),
+        db.Index('idx_scheduled_message_active', 'is_active'),
+    )
+
+    def to_dict(self):
+        """딕셔너리 변환"""
+        return {
+            'id': self.id,
+            'room_id': self.room_id,
+            'message': self.message,
+            'scheduled_time': self.scheduled_time.strftime('%H:%M') if self.scheduled_time else None,
+            'days_of_week': self.days_of_week,
+            'is_active': self.is_active,
+            'created_at': self.created_at.isoformat() + 'Z' if self.created_at else None,
+            'created_by': self.created_by
+        }

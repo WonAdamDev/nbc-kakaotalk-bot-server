@@ -107,6 +107,7 @@ def create_app(config_class=Config):
     from app.routes.admin import commands as admin_commands
     from app.routes.admin import data_management
     from app.routes import room_routes
+    from app.routes import scheduled_message_routes
 
     app.register_blueprint(commands.bp)
     app.register_blueprint(member_commands.bp)
@@ -116,6 +117,7 @@ def create_app(config_class=Config):
     app.register_blueprint(admin_commands.bp)
     app.register_blueprint(data_management.bp)
     app.register_blueprint(room_routes.bp)
+    app.register_blueprint(scheduled_message_routes.bp)
 
     # WebSocket 이벤트 핸들러 등록
     from app.routes.game import events
